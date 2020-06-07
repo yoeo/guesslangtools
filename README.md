@@ -64,7 +64,7 @@ pip install .
 You can run Guesslang tools on a terminal as follows:
 
 ```bash
-gltool /path/to/source_files_destination
+gltool /path/to/generated_datasets/
 ```
 
 Several options and hacks are available to fine tune the size and
