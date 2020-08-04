@@ -11,6 +11,7 @@ from zipfile import ZipFile, BadZipFile
 
 import chardet
 import pandas as pd
+from pathlib import Path
 
 from guesslangtools.common import (
     Config, File, cached, load_csv, save_csv, pool_imap
@@ -89,7 +90,7 @@ def _list_files_by_language(repo: pd.DataFrame) -> pd.DataFrame:
 
     results = []
     rows = (item for _, item in repo.iterrows())
-    args = (languages, ext_lang, ambiguous, nb_files_limit)
+    args = (Config.repositories_dir, languages, ext_lang, ambiguous, nb_files_limit)
     for index, result in enumerate(pool_imap(_select_files, rows, *args)):
         if result:
             results.append(result)
@@ -106,6 +107,7 @@ def _list_files_by_language(repo: pd.DataFrame) -> pd.DataFrame:
 
 def _select_files(
     item: Dict[str, str],
+    repositories_dir: str,
     languages: Dict[str, List[str]],
     ext_lang: Dict[str, str],
     ambiguous: Dict[str, List[str]],
@@ -114,7 +116,7 @@ def _select_files(
     repository_language = item['repository_language']
     repository_filename = item['repository_filename']
 
-    files = _list_compressed_files(repository_filename)
+    files = _list_compressed_files(repositories_dir, repository_filename)
     random.shuffle(files)
 
     output_items = []
@@ -143,9 +145,10 @@ def _select_files(
     return output_items
 
 
-def _list_compressed_files(repository_filename: str) -> List[Tuple[str, str]]:
+def _list_compressed_files(repositories_dir: str, repository_filename: str) -> List[Tuple[str, str]]:
     compressed_files = []
-    zip_filename = Config.repositories_dir.joinpath(repository_filename)
+    repositories_dir_path = Path(repositories_dir) 
+    zip_filename = repositories_dir_path.joinpath(repository_filename)
     with suppress(BadZipFile):
         with ZipFile(zip_filename) as zip_file:
             files_info = zip_file.filelist
@@ -371,7 +374,7 @@ def _extract_files(input_data: pd.DataFrame) -> pd.DataFrame:
     results = []
     grouped = input_data.groupby('repository_filename')
 
-    pool = pool_imap(_extract_from_repository, grouped)
+    pool = pool_imap(_extract_from_repository, grouped, Config.repositories_dir, Config.extracted_files_dir)
     for index, grouped_results in enumerate(pool, 1):
         results.append(grouped_results)
         if index % Config.step == 0:
@@ -384,15 +387,20 @@ def _extract_files(input_data: pd.DataFrame) -> pd.DataFrame:
 
 def _extract_from_repository(
     grouped_args: Tuple[str, pd.DataFrame],
+    repositories_dir: str,
+    extracted_files: str
 ) -> pd.DataFrame:
     repository_filename, items = grouped_args
-    zip_filename = Config.repositories_dir.joinpath(repository_filename)
+    repositories_dir_path = Path(repositories_dir)
+    extracted_files_path = Path(extracted_files)
+
+    zip_filename = repositories_dir_path.joinpath(repository_filename)
 
     def extract_zip_file(item: Dict[str, str]) -> Dict[str, Any]:
         usage = item['usage']
         filename = item['filename']
         basename = item['extract_to']
-        destination = Config.extracted_files_dir.joinpath(usage, basename)
+        destination = extracted_files_path.joinpath(usage, basename)
 
         ko = {'extract_to': basename, 'status': Status.DISCARDED.value}
         ok = {'extract_to': basename, 'status': Status.EXTRACTED.value}

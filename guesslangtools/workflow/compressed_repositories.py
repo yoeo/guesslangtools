@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, Any
-
 import pandas as pd
+from pathlib import Path
 
 from guesslangtools.common import (
     absolute, File, Config, cached, load_csv, download_file, pool_imap
@@ -86,7 +86,7 @@ def download() -> None:
 
     rows = (row_info[1] for row_info in input_data.iterrows())
     result_rows = []
-    for step, row in enumerate(pool_imap(_download_repository, rows), 1):
+    for step, row in enumerate(pool_imap(_download_repository, rows, Config.repositories_dir), 1):
         result_rows.append(row)
         if step % Config.step == 0:
             LOGGER.info('--> Processed %s repositories...', step)
@@ -105,9 +105,10 @@ def download() -> None:
     output_data.to_csv(output_path, index=False)
 
 
-def _download_repository(item: Dict[str, str]) -> Dict[str, str]:
+def _download_repository(item: Dict[str, str], repositories_dir: str) -> Dict[str, str]:
     url = item['repository_url']
-    path = Config.repositories_dir.joinpath(item['repository_filename'])
+    repo_dir = Path(repositories_dir)
+    path = repo_dir.joinpath(item['repository_filename'])
 
     if not path.exists():
         LOGGER.debug('Downloading %s', url)
