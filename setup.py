@@ -38,6 +38,7 @@ setup(
     packages=find_packages(exclude=['tests']),
     install_requires=Path('requirements.txt').read_text(),
     zip_safe=True,
+    include_package_data=True,
     # Test
     setup_requires=['pytest-runner'],
     tests_require='pytest',
