@@ -104,13 +104,13 @@ def cached(location: str) -> Callable[[Function], Function]:
                 _remove_from_cache(path)
 
             if path.exists():
-                LOGGER.info('Found in the cache: %s', path)
+                LOGGER.info(f'Found in the cache: {path}')
                 return
 
             Config.bypass_cache = True
             try:
                 result = func(*args, **kw)
-                LOGGER.info('Created cache file: %s', path)
+                LOGGER.info(f'Created cache file: {path}')
                 return result
             except (Exception, KeyboardInterrupt):
                 _remove_from_cache(path)
@@ -131,10 +131,10 @@ def requires(location: str) -> Callable[[Function], Function]:
 
             path = absolute(location)
             if not path.exists():
-                LOGGER.error('Cache file missing: %s', path)
+                LOGGER.error(f'Cache file missing: {path}')
                 raise RuntimeError(f'Requires cache file {path}')
 
-            LOGGER.info('Found in the cache: %s', path)
+            LOGGER.info(f'Found in the cache: {path}')
             result = func(*args, **kw)
             return result
 
@@ -146,7 +146,7 @@ def requires(location: str) -> Callable[[Function], Function]:
 def _remove_from_cache(path: Path) -> None:
     if path.is_file():
         path.unlink()
-        LOGGER.info('Removed cache file: %s', path)
+        LOGGER.info(f'Removed cache file: {path}')
 
 
 def download_file(url: str, destination: Path) -> Tuple[bool, int]:
@@ -154,7 +154,7 @@ def download_file(url: str, destination: Path) -> Tuple[bool, int]:
 
     response = requests.get(url, stream=True, timeout=TIMEOUT)
     if not response.ok:
-        LOGGER.warning('Cannot download %s: %s', url, response.status_code)
+        LOGGER.warning(f'Cannot download {url}: {response.status_code}')
         return False, response.status_code
 
     try:
@@ -162,11 +162,11 @@ def download_file(url: str, destination: Path) -> Tuple[bool, int]:
             for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
                 repo_file.write(chunk)
     except (IncompleteRead, SSLError) as error:
-        LOGGER.warning('Download cancelled %s: %s', url, error)
+        LOGGER.warning(f'Download cancelled {url}: {error}')
         _remove_if_possible(destination)
         return False, -2
     except requests.RequestException as error:
-        LOGGER.warning('Download failed %s: %s', url, error)
+        LOGGER.warning(f'Download failed  {url}: {error}')
         _remove_if_possible(destination)
         return False, -1
     except (Exception, KeyboardInterrupt):
@@ -231,4 +231,4 @@ def backup(filename: str) -> None:
         backup_path.unlink()
 
     current_path.replace(backup_path)
-    LOGGER.info('Backup: %s to %s', current_path, backup_path)
+    LOGGER.info(f'Backup: {current_path} to {backup_path}')

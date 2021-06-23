@@ -46,13 +46,14 @@ def select() -> None:
         nb_selected = min(nb_found, max_repositories)
 
         LOGGER.info(
-            '%s repositories, found: %s, kept: %s',
-            language, nb_found, nb_selected)
+            f'{language} repositories, found: {nb_found}, kept: {nb_selected}'
+        )
 
         if nb_selected < max_repositories:
             LOGGER.warning(
-                '%s, not enough repositories, required: %s',
-                language, max_repositories)
+                f'{language}, not enough repositories, '
+                f'required: {max_repositories}'
+            )
 
         if nb_selected == 0:
             continue
@@ -104,7 +105,7 @@ def download() -> None:
     for step, row in enumerate(pool_imap(_download_repository, rows), 1):
         result_rows.append(row)
         if step % Config.step == 0:
-            LOGGER.info('--> Processed %s repositories...', step)
+            LOGGER.info(f'--> Processed {step} repositories...')
 
     dataframes = [pd.DataFrame(row).T for row in result_rows]
     data = pd.concat(dataframes)
@@ -125,9 +126,9 @@ def _download_repository(item: Dict[str, str]) -> Dict[str, str]:
     path = Config.repositories_dir.joinpath(item['repository_filename'])
 
     if not path.exists():
-        LOGGER.debug('Downloading %s', url)
+        LOGGER.debug(f'Downloading {url}')
         command = GIT_CLONE_COMMAND + [url, str(path)]
-        result = run(command, stdout=PIPE)
+        result = run(command, stdout=PIPE, stderr=PIPE)
         if GIT_CLONE_ERROR in result.stdout:
             path.mkdir()
         if result.returncode != 0:

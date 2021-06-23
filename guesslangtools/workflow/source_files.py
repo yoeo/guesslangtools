@@ -21,7 +21,7 @@ from guesslangtools.common import (
 
 LOGGER = logging.getLogger(__name__)
 
-CRC_BITS = 32
+MIN_REPOSITORIES = 3
 MIN_ENCODING_CONFIDENCE = 0.5
 MIN_SPLIT_RATIO = 0.15
 
@@ -64,14 +64,14 @@ def list_all() -> None:
 
     mask = ~repo['repository_filename'].isin(files['repository_filename'])
     new_repo = repo[mask]
-    LOGGER.info('%s newly downloaded repositories', len(new_repo))
+    LOGGER.info(f'{len(new_repo)} newly downloaded repositories')
 
     nb_repo_before = len(files.repository_filename.unique())
     mask = files['repository_filename'].isin(repo['repository_filename'])
     files = files[mask]
     nb_repo_after = len(files.repository_filename.unique())
     nb_removed = nb_repo_before - nb_repo_after
-    LOGGER.info('%s deleted repositories', nb_removed)
+    LOGGER.info(f'{nb_removed} deleted repositories')
 
     new_files = _list_files_by_language(new_repo)
     df = pd.concat([files, new_files], axis=0, sort=False)
@@ -82,7 +82,7 @@ def list_all() -> None:
     LOGGER.info('Files available by language:')
     for language in Config.languages:
         nb_files = len(df[df['language'] == language])
-        LOGGER.info('--> %s: %s', language, nb_files)
+        LOGGER.info(f'--> {language}: {nb_files}')
 
     save_csv(df, File.AVAILABLE_FILES)
 
@@ -100,7 +100,7 @@ def _list_files_by_language(repo: pd.DataFrame) -> pd.DataFrame:
             results.append(result)
 
         if index % Config.step == 0:
-            LOGGER.info('--> Processed %s repositories...', index)
+            LOGGER.info(f'--> Processed {index} repositories...')
 
     LOGGER.info('Saving source files info')
     flattened = (file_info for result in results for file_info in result)
@@ -179,7 +179,7 @@ def _analyse_languages(
             ambiguous[ext] = langs
 
     if ambiguous:
-        LOGGER.warning('Ambiguous extensions found: %s', ambiguous)
+        LOGGER.warning(f'Ambiguous extensions found: {ambiguous}')
 
     for ext, langs in ambiguous.items():
         for lang in langs:
@@ -223,7 +223,7 @@ def split() -> None:
     repo = repo.sample(frac=1).reset_index(drop=True)
     repo.loc[:, 'usage'] = ''
 
-    LOGGER.info('Total downloaded repositories: %s', len(repo))
+    LOGGER.info(f'Total downloaded repositories: {len(repo)}')
 
     total_files = (
         Config.nb_train_files_per_language
@@ -240,9 +240,11 @@ def split() -> None:
     for language in Config.languages:
         by_language = repo[repo['repository_language'] == language]
         total = len(by_language)
-        if total < 3:
+        if total < MIN_REPOSITORIES:
             raise RuntimeError(
-                f'Need more than 3 repositories for language {language}')
+                f'Need more than {MIN_REPOSITORIES}, '
+                f'only {total} repositories usable for language {language}'
+            )
 
         nb_test = max(int(total*test_ratio), 1)
         nb_valid = max(int(total*valid_ratio), 1)
@@ -261,12 +263,13 @@ def split() -> None:
         repositories[f'{language}/train'] = train
 
         LOGGER.info(
-            '%s nb repositories, train: %s, valid: %s, test: %s',
-            language, total-nb_test_valid, nb_valid, nb_test)
+            f'{language} nb repositories, train: {total-nb_test_valid}, '
+            f'valid: {nb_valid}, test: {nb_test}'
+        )
 
     for name, repository in repositories.items():
         if not len(repository):
-            LOGGER.error('No repositories available for %s', name)
+            LOGGER.error(f'No repositories available for {name}')
             raise RuntimeError(f'No repositories for category: {name}')
 
     repo = pd.concat(repositories.values())
@@ -300,7 +303,7 @@ def extract() -> None:
 
     while True:
         selected = _choose_files_to_extract(df)
-        LOGGER.info('%s files to extract', len(selected))
+        LOGGER.info(f'{len(selected)} files to extract')
 
         if not len(selected):
             break
@@ -319,17 +322,18 @@ def extract() -> None:
         discarded = df[df['status'] == Status.DISCARDED.value]
 
         LOGGER.info(
-            'Processed %s files: %s extracted, %s discarded',
-            len(result), len(result_extracted), len(result_discarded))
+            f'Processed {len(result)} files: {len(result_extracted)} '
+            f'extracted, {len(result_discarded)} discarded'
+        )
 
-        LOGGER.info('%s total files extracted', len(extracted))
-        LOGGER.info('%s total files discarded', len(discarded))
+        LOGGER.info(f'{len(extracted)} total files extracted')
+        LOGGER.info(f'{len(discarded)} total files discarded')
 
     save_csv(df, File.EXTRACTED_FILES)
 
-    LOGGER.info('The training files are located in %s', train_path)
-    LOGGER.info('The validation files are located in %s', valid_path)
-    LOGGER.info('The test files are located in %s', test_path)
+    LOGGER.info(f'The training files are located in {train_path}')
+    LOGGER.info(f'The validation files are located in {valid_path}')
+    LOGGER.info(f'The test files are located in {test_path}')
 
 
 def _choose_files_to_extract(df: pd.DataFrame) -> pd.DataFrame:
@@ -357,13 +361,14 @@ def _choose_files_to_extract(df: pd.DataFrame) -> pd.DataFrame:
             files.append(kept)
 
             LOGGER.info(
-                '%s/%s, pending: %s files,  kept: %s files',
-                lang, usage, len(pending), len(kept))
+                f'{lang}/{usage}, pending: {len(pending)} files, '
+                f'kept: {len(kept)} files'
+            )
 
             if len(kept) < nb_files_to_keep:
                 LOGGER.warning(
-                    '%s/%s minimum required: %s files',
-                    lang, usage, nb_files_to_keep)
+                    f'{lang}/{usage} minimum required: {nb_files_to_keep} files'
+                )
 
     chosen = pd.concat(files)
     return chosen
@@ -377,7 +382,7 @@ def _extract_files(input_data: pd.DataFrame) -> pd.DataFrame:
     for index, grouped_results in enumerate(pool, 1):
         results.append(grouped_results)
         if index % Config.step == 0:
-            LOGGER.info('--> Processed %s repositories...', index)
+            LOGGER.info(f'--> Processed {index} repositories...')
 
     flattened = (file_info for result in results for file_info in result)
     final_result = pd.DataFrame(flattened)
@@ -392,7 +397,7 @@ def _extract_from_repository(
 
     filenames = set(items['filename'])
     command = GIT_RESET_FILES + list(filenames)
-    result = run(command, stdout=PIPE, cwd=zip_filename)
+    result = run(command, stdout=PIPE, stderr=PIPE, cwd=zip_filename)
     if result.returncode != 0:
         LOGGER.debug(f'Failed to reset files from {zip_filename}')
 
@@ -406,7 +411,7 @@ def _extract_from_repository(
         ok = {'extract_to': basename, 'status': Status.EXTRACTED.value}
 
         if destination.exists():
-            LOGGER.debug('File already extracted %s', destination)
+            LOGGER.debug(f'File already extracted {destination}')
             return ko
 
         source = zip_filename.joinpath(filename)
@@ -416,16 +421,16 @@ def _extract_from_repository(
         try:
             text = content.decode('utf-8')
         except UnicodeDecodeError:
-            LOGGER.debug('Non UTF-8 text %s: %s', zip_filename, filename)
+            LOGGER.debug(f'Non UTF-8 text {zip_filename}: {filename}')
             detected = chardet.detect(content)
             if detected['confidence'] < MIN_ENCODING_CONFIDENCE:
-                LOGGER.debug('Bad Encoding %s: %s', zip_filename, filename)
+                LOGGER.debug(f'Bad Encoding {zip_filename}: {filename}')
                 return ko
 
             try:
                 text = content.decode(detected['encoding'])
             except (UnicodeDecodeError, LookupError):
-                LOGGER.debug('Bad Encoding %s: %s', zip_filename, filename)
+                LOGGER.debug(f'Bad Encoding {zip_filename}: {filename}')
                 return ko
 
         destination.write_text(text)

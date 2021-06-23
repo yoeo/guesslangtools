@@ -1,4 +1,5 @@
 from csv import DictReader
+import logging
 from pathlib import Path
 from random import randint
 from secrets import token_bytes
@@ -126,7 +127,8 @@ def teardown_function(_):
 @patch(
     'guesslangtools.workflow.compressed_repositories.run',
     create_repository)
-def test_workflow():
+def test_workflow(caplog):
+    caplog.set_level(logging.INFO)
     warnings.filterwarnings('error', module='pandas')
 
     run_workflow()

@@ -46,7 +46,7 @@ def select_more_repositories(languages: List[str]) -> None:
     selected_list = []
     for language in languages:
         if language not in Config.languages:
-            LOGGER.error('Unknown language %s', language)
+            LOGGER.error(f'Unknown language {language}')
             raise RuntimeError(f'Unknown language {language}')
 
         pending = shuffled[shuffled['repository_language'] == language]
@@ -57,20 +57,16 @@ def select_more_repositories(languages: List[str]) -> None:
         total = nb_known + nb_selected
 
         LOGGER.info(
-            '%s: repositories per language: %s, pending: %s, known: %s, '
-            'selected: %s, total: %s',
-            language,
-            max_repositories,
-            nb_pending,
-            nb_known,
-            nb_selected,
-            total
+            f'{language}: repositories per language: {max_repositories}, '
+            f'pending: {nb_pending}, known: {nb_known}, '
+            f'selected: {nb_selected}, total: {total}'
         )
 
         if total < max_repositories:
             LOGGER.warning(
-                '%s, not enough repositories, required: %s',
-                language, max_repositories)
+                f'{language}, not enough repositories, '
+                f'required: {max_repositories}'
+            )
 
         if nb_selected == 0:
             continue
@@ -98,7 +94,7 @@ def select_only_downloaded_repo() -> None:
     selected = load_csv(File.SELECTED_REPOSITORIES)
     prepared = load_csv(File.PREPARED_REPOSITORIES)
 
-    LOGGER.info('%s repositories previously selected', len(selected))
+    LOGGER.info(f'{len(selected)} repositories previously selected')
 
     repo = pd.DataFrame(downloaded_repo, columns=['repository_filename'])
     mask = prepared['repository_filename'].isin(repo['repository_filename'])
@@ -106,7 +102,7 @@ def select_only_downloaded_repo() -> None:
     mask = selected['repository_name'].isin(prepared['repository_name'])
     selected = selected[mask]
 
-    LOGGER.info('%s downloaded repositories selected', len(selected))
+    LOGGER.info(f'{len(selected)} downloaded repositories selected')
 
     backup(File.SELECTED_REPOSITORIES)
     backup(File.PREPARED_REPOSITORIES)
