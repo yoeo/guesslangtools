@@ -7,17 +7,18 @@ from typing import Dict
 import pandas as pd
 
 from guesslangtools.common import (
-    absolute, File, cached, download_file, load_csv)
+    absolute, File, cached, download_file, load_csv
+)
 
 
 LOGGER = logging.getLogger(__name__)
 
-# Open source projects dataset: https://zenodo.org/record/1196312
+# Open source projects dataset: https://zenodo.org/record/3626071/
 DATASET_FILENAME = 'repositories-1.2.0-2018-03-12.csv'
 DATASET_URL = (
-    'https://zenodo.org/record/1196312/files/'
-    'Libraries.io-open-data-1.2.0.tar.gz')
-
+    'https://zenodo.org/record/3626071/files/'
+    'libraries-1.6.0-2020-01-12.tar.gz?download=1'
+)
 CSV_FIELD_LIMIT = 10 * 1024 * 1024  # 1O MiB
 
 PKG_ROOT = Path(__file__).parent.parent

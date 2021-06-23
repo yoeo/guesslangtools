@@ -1,17 +1,32 @@
 import logging
+from subprocess import run, PIPE
 from typing import Dict, Any
 
 import pandas as pd
 
 from guesslangtools.common import (
-    absolute, File, Config, cached, load_csv, download_file, pool_imap
+    absolute, File, Config, cached, load_csv, pool_imap
 )
 
 
 LOGGER = logging.getLogger(__name__)
 
-REPOSITORY_DOWNLOAD_URL = 'https://github.com/{}/{}/archive/master.zip'
-REPOSITORY_BASENAME = '{}___{}.zip'
+# Using "none" as credentials to generate an authentication error
+# when the repository is not accessible
+REPOSITORY_DOWNLOAD_URL = 'https://none:none@github.com/{}/{}.git'
+REPOSITORY_BASENAME = '{}___{}'
+
+GIT_CLONE_ERROR = b'Authentication failed'
+GIT_CLONE_TIMEOUT = 10
+GIT_CLONE_COMMAND = [
+    'timeout',
+    str(GIT_CLONE_TIMEOUT),
+    'git',
+    'clone',
+    '--no-checkout',
+    '--filter=blob:none',
+    '--depth=1'
+]
 
 
 @cached(File.SELECTED_REPOSITORIES)
@@ -111,10 +126,11 @@ def _download_repository(item: Dict[str, str]) -> Dict[str, str]:
 
     if not path.exists():
         LOGGER.debug('Downloading %s', url)
-        ok, status = download_file(url, path)
-        if status in (404, 451, -2):
-            path.write_text('')
-        if not ok:
+        command = GIT_CLONE_COMMAND + [url, str(path)]
+        result = run(command, stdout=PIPE)
+        if GIT_CLONE_ERROR in result.stdout:
+            path.mkdir()
+        if result.returncode != 0:
             item['repository_filename'] = ''
 
     return item
@@ -122,5 +138,5 @@ def _download_repository(item: Dict[str, str]) -> Dict[str, str]:
 
 def _check_size(item: Dict[str, Any]) -> Dict[str, Any]:
     path = Config.repositories_dir.joinpath(item['repository_filename'])
-    item['repository_size'] = path.lstat().st_size
+    item['repository_size'] = 1 if any(path.iterdir()) else 0
     return item

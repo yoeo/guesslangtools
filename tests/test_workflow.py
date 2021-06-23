@@ -2,7 +2,9 @@ from csv import DictReader
 from pathlib import Path
 from random import randint
 from secrets import token_bytes
+import shlex
 from shutil import rmtree
+from subprocess import check_output, STDOUT, CompletedProcess
 from tempfile import mkdtemp
 from unittest.mock import patch
 import warnings
@@ -15,6 +17,13 @@ from guesslangtools.workflow.source_files import Status
 
 DATA_PATH = Path(__file__).parent.joinpath('data')
 FILES_PER_LANG_PER_REPO = (5, 10)
+GIT_SETUP_COMMANDS = """
+    git init .
+    git checkout -B master
+    git add .
+    git commit -m "init"
+    git rm *
+"""
 
 
 # Helpers
@@ -53,23 +62,38 @@ def copy_dataset(_, destination):
     return True, 200
 
 
-def create_repository(_, destination):
-    with ZipFile(destination, 'w') as myzip:
-        myzip.writestr('data/file.txt', 'text')
-        for lang, exts in Config.languages.items():
-            myzip.writestr(f'src/{lang}/file.txt', 'text {lang}')
-            ext = exts[0]
-            for index in range(randint(*FILES_PER_LANG_PER_REPO)):
-                filename = f'src/{lang}/unicode_{index:02}.{ext}'
-                content = f'{destination}:{lang}:{index:02}'
-                myzip.writestr(filename, content)
+def create_repository(command, *_, **__):
+    # Generate repository files
+    destination = Path(command[-1])
+    destination.mkdir()
 
-                if index % 3 == 0:
-                    filename = f'src/{lang}/binary_{index:02}.{ext}'
-                    content = token_bytes(30)
-                    myzip.writestr(filename, content)
+    data_dir = destination.joinpath('data')
+    data_dir.mkdir()
+    data_dir.joinpath('file.txt').write_text('text')
 
-    return True, 200
+    src_dir = destination.joinpath('src')
+    src_dir.mkdir()
+
+    for lang, exts in Config.languages.items():
+        lang_dir = src_dir.joinpath(lang)
+        lang_dir.mkdir()
+        lang_dir.joinpath('file.txt').write_text('text {lang}')
+
+        ext = exts[0]
+        for index in range(randint(*FILES_PER_LANG_PER_REPO)):
+            content = f'{destination}:{lang}:{index:02}'
+            lang_dir.joinpath(f'unicode_{index:02}.{ext}').write_text(content)
+
+            if index % 3 == 0:
+                noise = token_bytes(30)
+                lang_dir.joinpath(f'binary_{index:02}.{ext}').write_bytes(noise)
+
+    # Setup git shallow repository
+    for line in GIT_SETUP_COMMANDS.strip().splitlines():
+        git_command = shlex.split(line.strip())
+        check_output(git_command, cwd=destination, stderr=STDOUT)
+
+    return CompletedProcess(command, 0, stdout=b'')
 
 
 # Tests
@@ -100,7 +124,7 @@ def teardown_function(_):
     'guesslangtools.workflow.repositories_dataset.download_file',
     copy_dataset)
 @patch(
-    'guesslangtools.workflow.compressed_repositories.download_file',
+    'guesslangtools.workflow.compressed_repositories.run',
     create_repository)
 def test_workflow():
     warnings.filterwarnings('error', module='pandas')

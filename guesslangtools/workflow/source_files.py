@@ -5,6 +5,8 @@ import logging
 from operator import itemgetter
 from pathlib import Path
 import random
+import shutil
+from subprocess import run, check_output, PIPE, CalledProcessError
 from typing import Dict, List, Any, Tuple, Optional
 from uuid import uuid4
 from zipfile import ZipFile, BadZipFile
@@ -22,6 +24,9 @@ LOGGER = logging.getLogger(__name__)
 CRC_BITS = 32
 MIN_ENCODING_CONFIDENCE = 0.5
 MIN_SPLIT_RATIO = 0.15
+
+GIT_LIST_FILES_COMMAND = ['git', 'ls-tree', '-r', 'HEAD']
+GIT_RESET_FILES = ['git', 'checkout', 'HEAD']
 
 random.seed()
 
@@ -146,15 +151,12 @@ def _select_files(
 def _list_compressed_files(repository_filename: str) -> List[Tuple[str, str]]:
     compressed_files = []
     zip_filename = Config.repositories_dir.joinpath(repository_filename)
-    with suppress(BadZipFile):
-        with ZipFile(zip_filename) as zip_file:
-            files_info = zip_file.filelist
-            for info in files_info:
-                if not info.file_size:
-                    continue  # Ignore empty files
-                dedup = (info.file_size << CRC_BITS) + info.CRC
-                dedup_key = f'0x{dedup:016x}'
-                compressed_files.append((info.filename, dedup_key))
+    with suppress(CalledProcessError):
+        result = check_output(GIT_LIST_FILES_COMMAND, cwd=zip_filename)
+        for info in result.decode().strip().split('\n'):
+            _, _, dedup, filename = info.strip().split(maxsplit=3)
+            dedup_key = f'0x{dedup}'
+            compressed_files.append((filename, dedup_key))
 
     return compressed_files
 
@@ -388,7 +390,13 @@ def _extract_from_repository(
     repository_filename, items = grouped_args
     zip_filename = Config.repositories_dir.joinpath(repository_filename)
 
-    def extract_zip_file(item: Dict[str, str]) -> Dict[str, Any]:
+    filenames = set(items['filename'])
+    command = GIT_RESET_FILES + list(filenames)
+    result = run(command, stdout=PIPE, cwd=zip_filename)
+    if result.returncode != 0:
+        LOGGER.debug(f'Failed to reset files from {zip_filename}')
+
+    def extract_file(item: Dict[str, str]) -> Dict[str, Any]:
         usage = item['usage']
         filename = item['filename']
         basename = item['extract_to']
@@ -401,8 +409,9 @@ def _extract_from_repository(
             LOGGER.debug('File already extracted %s', destination)
             return ko
 
-        with ZipFile(zip_filename) as zip_file:
-            content = zip_file.read(filename)
+        source = zip_filename.joinpath(filename)
+        content = source.read_bytes()
+        source.unlink()
 
         try:
             text = content.decode('utf-8')
@@ -422,5 +431,5 @@ def _extract_from_repository(
         destination.write_text(text)
         return ok
 
-    result = items.apply(extract_zip_file, axis=1)
+    result = items.apply(extract_file, axis=1)
     return result

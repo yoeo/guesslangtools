@@ -20,7 +20,7 @@ GitHub repositories.
 The million source code files used to feed Guesslang are generated as follows:
 
 1. Download Github open source repositories information from the
-[Libraries.io Open Source Repository and Dependency Metadata](https://zenodo.org/record/1196312/files/Libraries.io-open-data-1.2.0.tar.gz).
+[Libraries.io Open Source Repository and Dependency Metadata](https://zenodo.org/record/3626071/files/libraries-1.6.0-2020-01-12.tar.gz?download=1).
 2. Randomly select the repositories that will be used to create
   Guesslang's training, validation and test datasets.
 3. Download each selected repository.
