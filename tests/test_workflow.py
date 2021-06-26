@@ -1,11 +1,13 @@
 from csv import DictReader
+from io import BytesIO
 import logging
 from pathlib import Path
 from random import randint
-from secrets import token_bytes
+from secrets import token_bytes, token_hex
 import shlex
 from shutil import rmtree
 from subprocess import check_output, STDOUT, CompletedProcess
+from tarfile import TarFile, TarInfo
 from tempfile import mkdtemp
 from unittest.mock import patch
 import warnings
@@ -13,11 +15,26 @@ from zipfile import ZipFile
 
 from guesslangtools.common import Config, File, absolute
 from guesslangtools.app import run_workflow
+from guesslangtools.workflow.repositories_dataset import DATASET_FILENAME
 from guesslangtools.workflow.source_files import Status
 
 
-DATA_PATH = Path(__file__).parent.joinpath('data')
+REPO_PER_LANG = 10
 FILES_PER_LANG_PER_REPO = (5, 10)
+
+REPO_LIST_HEADERS = (
+    'ID,Host Type,Name with Owner,Description,Fork,Created Timestamp,'
+    'Updated Timestamp,Last pushed Timestamp,Homepage URL,Size,Stars Count,'
+    'Language,Issues enabled,Wiki enabled,Pages enabled,Forks Count,Mirror URL,'
+    'Open Issues Count,Default branch,Watchers Count,UUID,'
+    'Fork Source Name with Owner,License,Contributors Count,Readme filename,'
+    'Changelog filename,Contributing guidelines filename,License filename,'
+    'Code of Conduct filename,Security Threat Model filename,'
+    'Security Audit filename,Status,Last Synced Timestamp,SourceRank,'
+    'Display Name,SCM type,Pull requests enabled,Logo URL,Keywords'
+)
+REPO_LINE = ',GitHub,{full_name},,false,,,,,,,{lang},,,,,,,,,,,,,,,,,,,,,,,,,,,'
+
 GIT_SETUP_COMMANDS = """
     git init .
     git checkout -B master
@@ -30,36 +47,19 @@ GIT_SETUP_COMMANDS = """
 # Helpers
 
 
-def check_files():
-    path = absolute(File.EXTRACTED_FILES)
-    assert path.exists()
+def generate_dataset(_, destination):
+    csv_lines = [REPO_LIST_HEADERS]
+    for lang in Config.languages:
+        for pos in range(REPO_PER_LANG):
+            full_name = f'{token_hex()[:10]}/{token_hex()[:10]}'
+            csv_lines.append(REPO_LINE.format(full_name=full_name, lang=lang))
 
-    languages = Config.languages
-    files = {lang: 0 for lang in languages}
+    csv_bytes = '\n'.join(csv_lines).encode()
+    with TarFile.open(destination, 'w:gz') as tar_file:
+        tar_info = TarInfo(DATASET_FILENAME)
+        tar_info.size = len(csv_bytes)
+        tar_file.addfile(tar_info, BytesIO(csv_bytes))
 
-    with path.open() as csv_file:
-        for item in DictReader(csv_file):
-            if not item['status'] == Status.EXTRACTED.value:
-                continue
-
-            language = item['language']
-            path_elements = ('files', item['usage'], item['extract_to'])
-            extracted_path = absolute(*path_elements)
-            ext = extracted_path.suffix.lstrip('.')
-
-            assert extracted_path.exists()
-            assert ext in languages[language]
-
-            files[language] += 1
-
-    assert all(count == 30 for count in files.values())
-
-
-def copy_dataset(_, destination):
-    source = 'repositories_dataset.tar.xz'
-    source_path = DATA_PATH.joinpath(source)
-    destination_path = Path(destination)
-    destination_path.write_bytes(source_path.read_bytes())
     return True, 200
 
 
@@ -97,6 +97,31 @@ def create_repository(command, *_, **__):
     return CompletedProcess(command, 0, stdout=b'')
 
 
+def check_files():
+    path = absolute(File.EXTRACTED_FILES)
+    assert path.exists()
+
+    languages = Config.languages
+    files = {lang: 0 for lang in languages}
+
+    with path.open() as csv_file:
+        for item in DictReader(csv_file):
+            if not item['status'] == Status.EXTRACTED.value:
+                continue
+
+            language = item['language']
+            path_elements = ('files', item['usage'], item['extract_to'])
+            extracted_path = absolute(*path_elements)
+            ext = extracted_path.suffix.lstrip('.')
+
+            assert extracted_path.exists()
+            assert ext in languages[language]
+
+            files[language] += 1
+
+    assert all(count == 30 for count in files.values())
+
+
 # Tests
 
 
@@ -123,9 +148,9 @@ def teardown_function(_):
 
 @patch(
     'guesslangtools.workflow.repositories_dataset.download_file',
-    copy_dataset)
+    generate_dataset)
 @patch(
-    'guesslangtools.workflow.compressed_repositories.run',
+    'guesslangtools.workflow.github_repositories.run',
     create_repository)
 def test_workflow(caplog):
     caplog.set_level(logging.INFO)

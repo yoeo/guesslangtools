@@ -103,8 +103,8 @@ def select_only_downloaded_repo() -> None:
 
     LOGGER.info(f'{len(selected)} repositories previously selected')
 
-    repo = pd.DataFrame(downloaded_repo, columns=['repository_filename'])
-    mask = prepared['repository_filename'].isin(repo['repository_filename'])
+    repo = pd.DataFrame(downloaded_repo, columns=['repository_dirname'])
+    mask = prepared['repository_dirname'].isin(repo['repository_dirname'])
     prepared = prepared[mask]
     mask = selected['repository_name'].isin(prepared['repository_name'])
     selected = selected[mask]

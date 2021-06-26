@@ -52,7 +52,7 @@ def list_all() -> None:
     LOGGER.info('This operation might take several minutes...')
 
     columns = [
-        'extract_to', 'filename', 'language', 'rank', 'repository_filename',
+        'extract_to', 'filename', 'language', 'rank', 'repository_dirname',
         'dedup_key',
     ]
 
@@ -62,14 +62,14 @@ def list_all() -> None:
     except IOError:
         files = pd.DataFrame([], columns=columns)
 
-    mask = ~repo['repository_filename'].isin(files['repository_filename'])
+    mask = ~repo['repository_dirname'].isin(files['repository_dirname'])
     new_repo = repo[mask]
     LOGGER.info(f'{len(new_repo)} newly downloaded repositories')
 
-    nb_repo_before = len(files.repository_filename.unique())
-    mask = files['repository_filename'].isin(repo['repository_filename'])
+    nb_repo_before = len(files['repository_dirname'].unique())
+    mask = files['repository_dirname'].isin(repo['repository_dirname'])
     files = files[mask]
-    nb_repo_after = len(files.repository_filename.unique())
+    nb_repo_after = len(files['repository_dirname'].unique())
     nb_removed = nb_repo_before - nb_repo_after
     LOGGER.info(f'{nb_removed} deleted repositories')
 
@@ -117,9 +117,9 @@ def _select_files(
     nb_files_limit: int,
 ) -> List[Dict[str, Any]]:
     repository_language = item['repository_language']
-    repository_filename = item['repository_filename']
+    repository_dirname = item['repository_dirname']
 
-    files = _list_compressed_files(repository_filename)
+    files = _list_compressed_files(repository_dirname)
     random.shuffle(files)
 
     output_items = []
@@ -139,7 +139,7 @@ def _select_files(
         output_items.append({
             'language': lang,
             'repository_language': repository_language,
-            'repository_filename': repository_filename,
+            'repository_dirname': repository_dirname,
             'filename': filename,
             'dedup_key': dedup_key,
             'extract_to': extract_to_filename,
@@ -148,13 +148,15 @@ def _select_files(
     return output_items
 
 
-def _list_compressed_files(repository_filename: str) -> List[Tuple[str, str]]:
-    zip_filename = Config.repositories_dir.joinpath(repository_filename)
+def _list_compressed_files(repository_dirname: str) -> List[Tuple[str, str]]:
+    repository_path = Config.repositories_dir.joinpath(repository_dirname)
 
     try:
-        raw_result = check_output(GIT_LIST_FILES, cwd=zip_filename, stderr=PIPE)
+        raw_result = check_output(
+            GIT_LIST_FILES, cwd=repository_path, stderr=PIPE
+        )
     except CalledProcessError:
-        LOGGER.warning(f'Cannot list files from repository {zip_filename}')
+        LOGGER.warning(f'Cannot list files from repository {repository_path}')
         return []
 
     result = raw_result.decode().strip()
@@ -225,7 +227,7 @@ def split() -> None:
 
     files = load_csv(File.AVAILABLE_FILES)
     files = files.drop('dedup_key', axis=1)
-    columns = ['repository_language', 'repository_filename']
+    columns = ['repository_language', 'repository_dirname']
 
     repo = files[columns].drop_duplicates()
     repo = repo.sample(frac=1).reset_index(drop=True)
@@ -299,7 +301,7 @@ def extract() -> None:
 
     source = load_csv(File.FILES_SPLIT_BY_USAGE)
     columns = [
-        'extract_to', 'filename', 'language', 'rank', 'repository_filename',
+        'extract_to', 'filename', 'language', 'rank', 'repository_dirname',
         'repository_language', 'usage', 'status']
     try:
         files = load_csv(File.EXTRACTED_FILES)
@@ -384,7 +386,7 @@ def _choose_files_to_extract(df: pd.DataFrame) -> pd.DataFrame:
 
 def _extract_files(input_data: pd.DataFrame) -> pd.DataFrame:
     results = []
-    grouped = input_data.groupby('repository_filename')
+    grouped = input_data.groupby('repository_dirname')
 
     pool = pool_imap(_extract_from_repository, grouped)
     for index, grouped_results in enumerate(pool, 1):
@@ -400,14 +402,14 @@ def _extract_files(input_data: pd.DataFrame) -> pd.DataFrame:
 def _extract_from_repository(
     grouped_args: Tuple[str, pd.DataFrame],
 ) -> pd.DataFrame:
-    repository_filename, items = grouped_args
-    zip_filename = Config.repositories_dir.joinpath(repository_filename)
+    repository_dirname, items = grouped_args
+    repository_path = Config.repositories_dir.joinpath(repository_dirname)
 
     filenames = set(items['filename'])
     command = GIT_RESET_FILES + list(filenames)
-    result = run(command, stdout=PIPE, stderr=PIPE, cwd=zip_filename)
+    result = run(command, stdout=PIPE, stderr=PIPE, cwd=repository_path)
     if result.returncode != 0:
-        LOGGER.debug(f'Failed to reset files from {zip_filename}')
+        LOGGER.debug(f'Failed to reset files from {repository_path}')
 
     def extract_file(item: Dict[str, str]) -> Dict[str, Any]:
         usage = item['usage']
@@ -422,23 +424,23 @@ def _extract_from_repository(
             LOGGER.debug(f'File already extracted {destination}')
             return ko
 
-        source = zip_filename.joinpath(filename)
+        source = repository_path.joinpath(filename)
         content = source.read_bytes()
         source.unlink()
 
         try:
             text = content.decode('utf-8')
         except UnicodeDecodeError:
-            LOGGER.debug(f'Non UTF-8 text {zip_filename}: {filename}')
+            LOGGER.debug(f'Non UTF-8 text {repository_path}: {filename}')
             detected = chardet.detect(content)
             if detected['confidence'] < MIN_ENCODING_CONFIDENCE:
-                LOGGER.debug(f'Bad Encoding {zip_filename}: {filename}')
+                LOGGER.debug(f'Bad Encoding {repository_path}: {filename}')
                 return ko
 
             try:
                 text = content.decode(detected['encoding'])
             except (UnicodeDecodeError, LookupError):
-                LOGGER.debug(f'Bad Encoding {zip_filename}: {filename}')
+                LOGGER.debug(f'Bad Encoding {repository_path}: {filename}')
                 return ko
 
         destination.write_text(text)

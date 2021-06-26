@@ -76,7 +76,7 @@ def prepare() -> None:
     LOGGER.info('This operation should take few seconds...')
 
     input_data = load_csv(File.SELECTED_REPOSITORIES)
-    input_data.loc[:, 'repository_filename'] = ''
+    input_data.loc[:, 'repository_dirname'] = ''
     input_data.loc[:, 'repository_url'] = ''
 
     output_data = input_data.apply(_add_download_info, axis=1)
@@ -86,10 +86,10 @@ def prepare() -> None:
 
 def _add_download_info(item: Dict[str, str]) -> Dict[str, str]:
     user, project = item['repository_name'].split('/')
-    filename = REPOSITORY_BASENAME.format(user, project)
+    dirname = REPOSITORY_BASENAME.format(user, project)
 
     item['repository_url'] = REPOSITORY_DOWNLOAD_URL.format(user, project)
-    item['repository_filename'] = filename
+    item['repository_dirname'] = dirname
     return item
 
 
@@ -102,7 +102,7 @@ def download() -> None:
 
     rows = (row_info[1] for row_info in input_data.iterrows())
     result_rows = []
-    for step, row in enumerate(pool_imap(_download_repository, rows), 1):
+    for step, row in enumerate(pool_imap(_clone_repository, rows), 1):
         result_rows.append(row)
         if step % Config.step == 0:
             LOGGER.info(f'--> Processed {step} repositories...')
@@ -113,17 +113,17 @@ def download() -> None:
     data.loc[:, 'repository_size'] = 0
     data = data.apply(_check_size, axis=1)
     data = data[data['repository_size'] != 0]
-    data = data[data['repository_filename'] != '']
+    data = data[data['repository_dirname'] != '']
 
-    fieldnames = ['repository_language', 'repository_filename']
+    fieldnames = ['repository_language', 'repository_dirname']
     output_data = data[fieldnames]
     output_path = absolute(File.DOWNLOADED_REPOSITORIES)
     output_data.to_csv(output_path, index=False)
 
 
-def _download_repository(item: Dict[str, str]) -> Dict[str, str]:
+def _clone_repository(item: Dict[str, str]) -> Dict[str, str]:
     url = item['repository_url']
-    path = Config.repositories_dir.joinpath(item['repository_filename'])
+    path = Config.repositories_dir.joinpath(item['repository_dirname'])
 
     if not path.exists():
         LOGGER.debug(f'Downloading {url}')
@@ -132,12 +132,12 @@ def _download_repository(item: Dict[str, str]) -> Dict[str, str]:
         if GIT_CLONE_ERROR in result.stdout:
             path.mkdir()
         if result.returncode != 0:
-            item['repository_filename'] = ''
+            item['repository_dirname'] = ''
 
     return item
 
 
 def _check_size(item: Dict[str, Any]) -> Dict[str, Any]:
-    path = Config.repositories_dir.joinpath(item['repository_filename'])
+    path = Config.repositories_dir.joinpath(item['repository_dirname'])
     item['repository_size'] = 1 if any(path.iterdir()) else 0
     return item
