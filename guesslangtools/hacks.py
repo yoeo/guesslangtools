@@ -1,8 +1,10 @@
 from contextlib import suppress
 import logging
+import time
 from typing import List
 
 import pandas as pd
+import requests
 
 from guesslangtools.common import (
     absolute, File, Config, requires, load_csv, save_csv, backup
@@ -12,6 +14,11 @@ from guesslangtools.common import (
 LOGGER = logging.getLogger(__name__)
 
 DATASET_BASENAME = 'alt_dataset.csv'
+
+GITHUB_API_URL = 'https://api.github.com/search/repositories'
+GITHUB_DELAY = 2.1  # GITHUB API rate limit is 30 request/min
+MAX_PAGES = 100
+PER_PAGE = 100
 
 
 @requires(File.SELECTED_REPOSITORIES)
@@ -30,7 +37,7 @@ def show_repositories_distribution() -> None:
 @requires(File.SELECTED_REPOSITORIES)
 def select_more_repositories(languages: List[str]) -> None:
     LOGGER.info('Choose more repositories per language')
-    LOGGER.info('This operation might take few minutes...')
+    LOGGER.info('This operation might take several minutes...')
 
     output_path = absolute(File.SELECTED_REPOSITORIES)
 
@@ -108,3 +115,51 @@ def select_only_downloaded_repo() -> None:
     backup(File.PREPARED_REPOSITORIES)
     save_csv(selected, File.SELECTED_REPOSITORIES)
     save_csv(prepared, File.PREPARED_REPOSITORIES)
+
+
+@requires(File.SELECTED_REPOSITORIES)
+def merge_to_selected_repositories(filename: str) -> None:
+    selected = load_csv(File.SELECTED_REPOSITORIES)
+    listed = load_csv(filename)
+
+    selected = pd.concat([listed, selected])
+    selected = selected.drop_duplicates('repository_name')
+
+    backup(File.SELECTED_REPOSITORIES)
+    save_csv(selected, File.SELECTED_REPOSITORIES)
+    with suppress(IOError):
+        backup(File.PREPARED_REPOSITORIES)
+
+
+def download_github_repo_list(
+    token: str, language: str, filename: str
+) -> None:
+    LOGGER.info(f'Listing repositories for language {language}')
+    with open(filename, 'w') as output:
+        output.write('repository_name,repository_language\n')
+
+        known_repos = set()
+        for page in range(1, MAX_PAGES+1):
+            LOGGER.info(f'Processing page {page: 3} / {MAX_PAGES}')
+            url = (
+                f'{GITHUB_API_URL}?access_token={token}&q=language:{language}'
+                f'&per_page={PER_PAGE}&page={page}&sort=updated&order=desc'
+            )
+            response = requests.get(url)
+            items = response.json().get('items', [])
+            if not response.ok or not items:
+                LOGGER.info('No more repositories to retrieve')
+                break
+
+            for repo in items:
+                repo_name = repo['full_name']
+                repo_id = repo['id']
+                if repo_id in known_repos:
+                    print(repo_id)
+                    continue
+
+                known_repos.add(repo_id)
+                output.write(f'{repo_name},{language}\n')
+
+            time.sleep(GITHUB_DELAY)
+    LOGGER.info(f'{len(known_repos)} repositories saved in {filename}')

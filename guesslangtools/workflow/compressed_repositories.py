@@ -32,7 +32,7 @@ GIT_CLONE_COMMAND = [
 @cached(File.SELECTED_REPOSITORIES)
 def select() -> None:
     LOGGER.info('Choose repositories per language')
-    LOGGER.info('This operation might take few minutes...')
+    LOGGER.info('This operation might take several minutes...')
 
     input_data = load_csv(File.ALTERED_DATASET)
     shuffled = input_data.sample(frac=1).reset_index(drop=True)

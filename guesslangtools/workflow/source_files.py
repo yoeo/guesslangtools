@@ -25,7 +25,7 @@ MIN_REPOSITORIES = 3
 MIN_ENCODING_CONFIDENCE = 0.5
 MIN_SPLIT_RATIO = 0.15
 
-GIT_LIST_FILES_COMMAND = ['git', 'ls-tree', '-r', 'HEAD']
+GIT_LIST_FILES = ['git', 'ls-tree', '-r', 'HEAD']
 GIT_RESET_FILES = ['git', 'checkout', 'HEAD']
 
 random.seed()
@@ -49,7 +49,7 @@ class Status(Enum):
 @cached(File.FILES_SPLIT_BY_USAGE)
 def list_all() -> None:
     LOGGER.info('List source files from repositories')
-    LOGGER.info('This operation might take few minutes...')
+    LOGGER.info('This operation might take several minutes...')
 
     columns = [
         'extract_to', 'filename', 'language', 'rank', 'repository_filename',
@@ -149,15 +149,23 @@ def _select_files(
 
 
 def _list_compressed_files(repository_filename: str) -> List[Tuple[str, str]]:
-    compressed_files = []
     zip_filename = Config.repositories_dir.joinpath(repository_filename)
-    with suppress(CalledProcessError):
-        result = check_output(GIT_LIST_FILES_COMMAND, cwd=zip_filename)
-        for info in result.decode().strip().split('\n'):
-            _, _, dedup, filename = info.strip().split(maxsplit=3)
-            dedup_key = f'0x{dedup}'
-            compressed_files.append((filename, dedup_key))
 
+    try:
+        raw_result = check_output(GIT_LIST_FILES, cwd=zip_filename, stderr=PIPE)
+    except CalledProcessError:
+        LOGGER.warning(f'Cannot list files from repository {zip_filename}')
+        return []
+
+    result = raw_result.decode().strip()
+    if not result:
+        return []
+
+    compressed_files = []
+    for info in result.split('\n'):
+        _, _, dedup, filename = info.strip().split(maxsplit=3)
+        dedup_key = f'0x{dedup}'
+        compressed_files.append((filename, dedup_key))
     return compressed_files
 
 

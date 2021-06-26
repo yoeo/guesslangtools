@@ -14,7 +14,9 @@ from guesslangtools.common import (
 LOGGER = logging.getLogger(__name__)
 
 # Open source projects dataset: https://zenodo.org/record/3626071/
-DATASET_FILENAME = 'repositories-1.2.0-2018-03-12.csv'
+DATASET_FILENAME = (
+    'libraries-1.6.0-2020-01-12/repositories-1.6.0-2020-01-12.csv'
+)
 DATASET_URL = (
     'https://zenodo.org/record/3626071/files/'
     'libraries-1.6.0-2020-01-12.tar.gz?download=1'
@@ -22,7 +24,7 @@ DATASET_URL = (
 CSV_FIELD_LIMIT = 10 * 1024 * 1024  # 1O MiB
 
 PKG_ROOT = Path(__file__).parent.parent
-SQL_DATASET_PATH = PKG_ROOT.joinpath('data', 'sql_dataset.csv')
+OTHER_REPO_DATASET_PATH = PKG_ROOT.joinpath('data', 'other_repositories.csv')
 
 
 @cached(File.COMPRESSED_DATASET)
@@ -37,7 +39,7 @@ def download() -> None:
 @cached(File.DATASET)
 def extract() -> None:
     LOGGER.info('Extracting repositories list file')
-    LOGGER.info('This operation might take few minutes...')
+    LOGGER.info('This operation might take several minutes...')
 
     compressed_filename = absolute(File.COMPRESSED_DATASET)
     with tarfile.open(compressed_filename) as tar:
@@ -50,7 +52,7 @@ def extract() -> None:
 @cached(File.SHRUNK_DATASET)
 def shrink() -> None:
     LOGGER.info('Shrink repositories list file')
-    LOGGER.info('This operation might take few minutes...')
+    LOGGER.info('This operation might take several minutes...')
 
     input_path = absolute(File.DATASET)
     output_path = absolute(File.SHRUNK_DATASET)
@@ -85,7 +87,7 @@ def _ignore(item: Dict[str, str]) -> bool:
 @cached(File.ALTERED_DATASET)
 def alter() -> None:
     LOGGER.info('Alter repositories list file')
-    LOGGER.info('This operation might take few minutes...')
+    LOGGER.info('This operation might take several minutes...')
 
     output_path = absolute(File.ALTERED_DATASET)
 
@@ -96,11 +98,9 @@ def alter() -> None:
     mask = df['repository_language'].isnull()
     df.loc[mask, 'repository_language'] = 'Markdown'
 
-    # There are too few repositories tagged as SQL repositories.
-    # To mitigate this problem, a list of known repositories are flagged as
-    # SQL repositories.
-    sql_df = pd.read_csv(SQL_DATASET_PATH)
-    mask = df['repository_name'].isin(sql_df['repository_name'])
-    df.loc[mask, 'repository_language'] = 'SQL'
-
+    # There are too few repositories for some languages.
+    # To mitigate this problem, a list of known repositories
+    # is added to the dataset.
+    other_df = pd.read_csv(OTHER_REPO_DATASET_PATH)
+    df = pd.concat([other_df, df]).drop_duplicates('repository_name')
     df.to_csv(output_path, index=False)
