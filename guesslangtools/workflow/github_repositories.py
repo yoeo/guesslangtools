@@ -5,7 +5,7 @@ from typing import Dict, Any
 import pandas as pd
 
 from guesslangtools.common import (
-    absolute, File, Config, cached, load_csv, pool_imap
+    absolute, File, Config, cached, load_csv, pool_map
 )
 
 
@@ -99,14 +99,17 @@ def download() -> None:
     LOGGER.info('This operation might take a lot of time...')
 
     input_data = load_csv(File.PREPARED_REPOSITORIES)
+    total_repo = len(input_data)
 
-    rows = (row_info[1] for row_info in input_data.iterrows())
+    rows = (dict(row_info[1]) for row_info in input_data.iterrows())
     result_rows = []
-    for step, row in enumerate(pool_imap(_clone_repository, rows), 1):
+    for step, row in enumerate(pool_map(_clone_repository, rows), 1):
         result_rows.append(row)
         if step % Config.step == 0:
-            LOGGER.info(f'--> Processed {step} repositories...')
+            LOGGER.info(f'--> Processed {step} / {total_repo} repositories...')
+    LOGGER.info(f'--> Processed {total_repo} / {total_repo} repositories!')
 
+    LOGGER.info(f'Checking for empty repositories')
     dataframes = [pd.DataFrame(row).T for row in result_rows]
     data = pd.concat(dataframes)
 

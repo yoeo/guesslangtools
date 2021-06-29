@@ -51,7 +51,7 @@ def generate_dataset(_, destination):
     csv_lines = [REPO_LIST_HEADERS]
     for lang in Config.languages:
         for pos in range(REPO_PER_LANG):
-            full_name = f'{token_hex()[:10]}/{token_hex()[:10]}'
+            full_name = f'{token_hex()[:10]}/{token_hex()}'
             csv_lines.append(REPO_LINE.format(full_name=full_name, lang=lang))
 
     csv_bytes = '\n'.join(csv_lines).encode()

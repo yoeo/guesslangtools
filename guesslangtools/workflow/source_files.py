@@ -15,7 +15,7 @@ import chardet
 import pandas as pd
 
 from guesslangtools.common import (
-    Config, File, cached, load_csv, save_csv, pool_imap
+    Config, File, cached, load_csv, save_csv, pool_map
 )
 
 
@@ -27,6 +27,8 @@ MIN_SPLIT_RATIO = 0.15
 
 GIT_LIST_FILES = ['git', 'ls-tree', '-r', 'HEAD']
 GIT_RESET_FILES = ['git', 'checkout', 'HEAD']
+GIT_DISABLE_GC = ['git', 'config', 'gc.auto', '0']
+GIT_RESET_FILES = ['timeout', '600', 'git', 'checkout', 'HEAD']
 
 random.seed()
 
@@ -91,16 +93,18 @@ def _list_files_by_language(repo: pd.DataFrame) -> pd.DataFrame:
     languages = Config.languages
     nb_files_limit = Config.max_files_per_repository_per_language
     ext_lang, ambiguous = _analyse_languages(languages)
+    total_repo = len(repo)
 
     results = []
-    rows = (item for _, item in repo.iterrows())
+    rows = (dict(item) for _, item in repo.iterrows())
     args = (languages, ext_lang, ambiguous, nb_files_limit)
-    for index, result in enumerate(pool_imap(_select_files, rows, *args)):
+    for index, result in enumerate(pool_map(_select_files, rows, *args)):
         if result:
             results.append(result)
 
         if index % Config.step == 0:
-            LOGGER.info(f'--> Processed {index} repositories...')
+            LOGGER.info(f'--> Processed {index} / {total_repo} repositories...')
+    LOGGER.info(f'--> Processed {total_repo} / {total_repo} repositories!')
 
     LOGGER.info('Saving source files info')
     flattened = (file_info for result in results for file_info in result)
@@ -387,12 +391,14 @@ def _choose_files_to_extract(df: pd.DataFrame) -> pd.DataFrame:
 def _extract_files(input_data: pd.DataFrame) -> pd.DataFrame:
     results = []
     grouped = input_data.groupby('repository_dirname')
+    nb_groups = len(grouped)
 
-    pool = pool_imap(_extract_from_repository, grouped)
+    pool = pool_map(_extract_from_repository, grouped, multiplier=2)
     for index, grouped_results in enumerate(pool, 1):
         results.append(grouped_results)
         if index % Config.step == 0:
-            LOGGER.info(f'--> Processed {index} repositories...')
+            LOGGER.info(f'--> Processed {index} / {nb_groups} repositories...')
+    LOGGER.info(f'--> Processed {nb_groups} / {nb_groups} repositories!')
 
     flattened = (file_info for result in results for file_info in result)
     final_result = pd.DataFrame(flattened)
@@ -404,6 +410,10 @@ def _extract_from_repository(
 ) -> pd.DataFrame:
     repository_dirname, items = grouped_args
     repository_path = Config.repositories_dir.joinpath(repository_dirname)
+
+    result = run(GIT_DISABLE_GC, stdout=PIPE, stderr=PIPE, cwd=repository_path)
+    if result.returncode != 0:
+        LOGGER.debug(f'Failed to disable GC in {repository_path}')
 
     filenames = set(items['filename'])
     command = GIT_RESET_FILES + list(filenames)
@@ -425,8 +435,12 @@ def _extract_from_repository(
             return ko
 
         source = repository_path.joinpath(filename)
-        content = source.read_bytes()
-        source.unlink()
+        try:
+            content = source.read_bytes()
+            source.unlink()
+        except OSError:
+            LOGGER.debug(f'Unreachable file {source}')
+            return ko
 
         try:
             text = content.decode('utf-8')

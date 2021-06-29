@@ -3,12 +3,21 @@ from functools import wraps
 from http.client import IncompleteRead
 import json
 import logging
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 from pathlib import Path
 import signal
 from ssl import SSLError
 from typing import (
-    Dict, List, Tuple, Any, Callable, Iterator, Iterable, TypeVar, cast
+    Dict,
+    List,
+    Tuple,
+    Any,
+    Callable,
+    Iterator,
+    Iterable,
+    TypeVar,
+    Optional,
+    cast,
 )
 
 import pandas as pd
@@ -195,17 +204,19 @@ def save_csv(df: pd.DataFrame, filename: str) -> None:
     df.to_csv(fullname, index=False)
 
 
-def pool_imap(
+def pool_map(
     method: Function,
     items: Iterable[Any],
     *method_args: Any,
+    multiplier: Optional[int] = None,
     **method_kw: Any,
 ) -> Iterator[Any]:
     """Run a function with multiprocessing."""
 
+    processes = multiplier * cpu_count() if multiplier else None
     iterable = ((method, item, method_args, method_kw) for item in items)
-    with Pool(initializer=_initializer) as pool:
-        for result in pool.imap(_apply, iterable):
+    with Pool(processes, initializer=_initializer) as pool:
+        for result in pool.imap_unordered(_apply, iterable):
             yield result
 
 

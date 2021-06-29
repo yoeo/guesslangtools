@@ -1,10 +1,10 @@
 {
-  "Assembly": ["asm"],
+  "Assembly": ["asm", "s"],
   "Batchfile": ["bat", "cmd", "btm"],
   "C": ["c"],
   "C#": ["cs"],
   "C++": ["cpp", "cc"],
-  "CoffeeScript": ["coffee", "litcoffee"],
+  "CoffeeScript": ["coffee"],
   "CSS": ["css"],
   "CSV": ["csv"],
   "Dart": ["dart"],
@@ -21,11 +21,11 @@
   "Julia": ["jl"],
   "Jupyter Notebook": ["ipynb"],
   "Lua": ["lua"],
-  "Kotlin": ["kt"],
+  "Kotlin": ["kt", "kts"],
   "Markdown": ["md"],
   "Matlab": ["matlab", "m"],
   "Objective-C": ["mm", "m"],
-  "Pascal": ["pa", "pp"],
+  "Pascal": ["pas", "pp"],
   "Perl": ["pl", "pm"],
   "PHP": ["php"],
   "PowerShell": ["ps1"],
@@ -42,5 +42,5 @@
   "TypeScript": ["ts", "tsx"],
   "Visual Basic": ["vba", "vb", "bas"],
   "XML": ["xml"],
-  "YAML": ["yaml"]
+  "YAML": ["yaml", "yml"]
 }
