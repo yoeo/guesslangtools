@@ -2,11 +2,10 @@ from csv import DictReader
 from io import BytesIO
 import logging
 from pathlib import Path
-from random import randint
-from secrets import token_bytes, token_hex
+from secrets import token_bytes
 import shlex
 from shutil import rmtree
-from subprocess import check_output, STDOUT, CompletedProcess
+from subprocess import check_output, STDOUT
 from tarfile import TarFile, TarInfo
 from tempfile import mkdtemp
 from unittest.mock import patch
@@ -19,8 +18,10 @@ from guesslangtools.workflow.repositories_dataset import DATASET_FILENAME
 from guesslangtools.workflow.source_files import Status
 
 
-REPO_PER_LANG = 10
-FILES_PER_LANG_PER_REPO = (5, 10)
+REPO_PER_LANG = 3
+FILES_PER_LANG_PER_REPO = 3
+FILES_PER_LANG_PER_DATASET = 3  # < (files per repo * total repo) / 3 datasets
+FILES_PER_LANG = FILES_PER_LANG_PER_DATASET * 3  # 3 datasets
 
 REPO_LIST_HEADERS = (
     'ID,Host Type,Name with Owner,Description,Fork,Created Timestamp,'
@@ -49,9 +50,10 @@ GIT_SETUP_COMMANDS = """
 
 def generate_dataset(_, destination):
     csv_lines = [REPO_LIST_HEADERS]
-    for lang in Config.languages:
+    for lang, exts in Config.languages.items():
+        ext = exts[0]
         for pos in range(REPO_PER_LANG):
-            full_name = f'{token_hex()[:10]}/{token_hex()}'
+            full_name = f'user_{ext}/repo_{pos:02}'
             csv_lines.append(REPO_LINE.format(full_name=full_name, lang=lang))
 
     csv_bytes = '\n'.join(csv_lines).encode()
@@ -63,38 +65,38 @@ def generate_dataset(_, destination):
     return True, 200
 
 
-def create_repository(command, *_, **__):
-    # Generate repository files
-    destination = Path(command[-1])
-    destination.mkdir()
+def create_repositories(_, rows, *__, **___):
+    for item in rows:
+        # Generate repository files
+        path = Config.repositories_dir.joinpath(item['repository_dirname'])
+        path.mkdir()
 
-    data_dir = destination.joinpath('data')
-    data_dir.mkdir()
-    data_dir.joinpath('file.txt').write_text('text')
+        data_dir = path.joinpath('data')
+        data_dir.mkdir()
+        data_dir.joinpath('file.txt').write_text('text')
 
-    src_dir = destination.joinpath('src')
-    src_dir.mkdir()
+        src_dir = path.joinpath('src')
+        src_dir.mkdir()
 
-    for lang, exts in Config.languages.items():
-        lang_dir = src_dir.joinpath(lang)
-        lang_dir.mkdir()
-        lang_dir.joinpath('file.txt').write_text('text {lang}')
+        for lang, exts in Config.languages.items():
+            lang_dir = src_dir.joinpath(lang)
+            lang_dir.mkdir()
+            lang_dir.joinpath('file.txt').write_text('text {lang}')
 
-        ext = exts[0]
-        for index in range(randint(*FILES_PER_LANG_PER_REPO)):
-            content = f'{destination}:{lang}:{index:02}'
-            lang_dir.joinpath(f'unicode_{index:02}.{ext}').write_text(content)
+            ext = exts[0]
+            noise = token_bytes(30)
+            lang_dir.joinpath(f'binary_00.{ext}').write_bytes(noise)
+            for index in range(FILES_PER_LANG_PER_REPO):
+                content = f'{path}:{lang}:{index:02}'
+                filename = f'unicode_{index:02}.{ext}'
+                lang_dir.joinpath(filename).write_text(content)
 
-            if index % 3 == 0:
-                noise = token_bytes(30)
-                lang_dir.joinpath(f'binary_{index:02}.{ext}').write_bytes(noise)
+        # Setup git shallow repository
+        for line in GIT_SETUP_COMMANDS.strip().splitlines():
+            git_command = shlex.split(line.strip())
+            check_output(git_command, cwd=path, stderr=STDOUT)
 
-    # Setup git shallow repository
-    for line in GIT_SETUP_COMMANDS.strip().splitlines():
-        git_command = shlex.split(line.strip())
-        check_output(git_command, cwd=destination, stderr=STDOUT)
-
-    return CompletedProcess(command, 0, stdout=b'')
+        yield item
 
 
 def check_files():
@@ -119,7 +121,9 @@ def check_files():
 
             files[language] += 1
 
-    assert all(count == 30 for count in files.values())
+    for lang, nb_files in files.items():
+        message = f'Lang {lang}, expected: {FILES_PER_LANG}, found: {nb_files}'
+        assert nb_files == FILES_PER_LANG, message
 
 
 # Tests
@@ -130,10 +134,10 @@ def setup_function(_):
     print(f'Temporary config directory: {tempdir}')
     Config.setup(
         cache_dir=tempdir,
-        nb_repositories=10,
-        nb_train=10,
-        nb_valid=10,
-        nb_test=10,
+        nb_repositories=REPO_PER_LANG,
+        nb_train=FILES_PER_LANG_PER_DATASET,
+        nb_valid=FILES_PER_LANG_PER_DATASET,
+        nb_test=FILES_PER_LANG_PER_DATASET,
     )
 
     assert Config.cache_dir == tempdir
@@ -143,15 +147,17 @@ def teardown_function(_):
     assert Config.cache_dir
     assert Config.cache_dir.endswith('_gesslangtools_unittest')
 
-    rmtree(Config.cache_dir)
+    #rmtree(Config.cache_dir)
 
 
 @patch(
     'guesslangtools.workflow.repositories_dataset.download_file',
-    generate_dataset)
+    generate_dataset,
+)
 @patch(
-    'guesslangtools.workflow.github_repositories.run',
-    create_repository)
+    'guesslangtools.workflow.github_repositories.pool_map',
+    create_repositories,
+)
 def test_workflow(caplog):
     caplog.set_level(logging.INFO)
     warnings.filterwarnings('error', module='pandas')

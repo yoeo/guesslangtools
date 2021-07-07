@@ -101,7 +101,7 @@ def download() -> None:
     input_data = load_csv(File.PREPARED_REPOSITORIES)
     total_repo = len(input_data)
 
-    rows = (dict(row_info[1]) for row_info in input_data.iterrows())
+    rows = (dict(row) for _, row in input_data.iterrows())
     result_rows = []
     for step, row in enumerate(pool_map(_clone_repository, rows), 1):
         result_rows.append(row)
@@ -110,8 +110,7 @@ def download() -> None:
     LOGGER.info(f'--> Processed {total_repo} / {total_repo} repositories!')
 
     LOGGER.info(f'Checking for empty repositories')
-    dataframes = [pd.DataFrame(row).T for row in result_rows]
-    data = pd.concat(dataframes)
+    data = pd.DataFrame(result_rows)
 
     data.loc[:, 'repository_size'] = 0
     data = data.apply(_check_size, axis=1)

@@ -30,6 +30,27 @@ GIT_RESET_FILES = ['git', 'checkout', 'HEAD']
 GIT_DISABLE_GC = ['git', 'config', 'gc.auto', '0']
 GIT_RESET_FILES = ['timeout', '600', 'git', 'checkout', 'HEAD']
 
+AVAILABLE_FILES_COLUMNS = [
+    'extract_to',
+    'dedup_key',
+    'filename',
+    'language',
+    'rank',
+    'repository_dirname',
+    'repository_language',  # FIXME
+]
+
+EXTRACTED_FILES_COLUMNS = [
+    'extract_to',
+    'filename',
+    'language',
+    'rank',
+    'repository_dirname',
+    'repository_language',
+    'usage',
+    'status',
+]
+
 random.seed()
 
 
@@ -47,22 +68,17 @@ class Status(Enum):
     DISCARDED = auto()
 
 
-# (re-)Generates File.AVAILABLE_FILES
+# Always (re-)generates File.AVAILABLE_FILES
 @cached(File.FILES_SPLIT_BY_USAGE)
 def list_all() -> None:
     LOGGER.info('List source files from repositories')
     LOGGER.info('This operation might take several minutes...')
 
-    columns = [
-        'extract_to', 'filename', 'language', 'rank', 'repository_dirname',
-        'dedup_key',
-    ]
-
     repo = load_csv(File.DOWNLOADED_REPOSITORIES)
     try:
         files = load_csv(File.AVAILABLE_FILES)
     except IOError:
-        files = pd.DataFrame([], columns=columns)
+        files = pd.DataFrame([], columns=AVAILABLE_FILES_COLUMNS)
 
     mask = ~repo['repository_dirname'].isin(files['repository_dirname'])
     new_repo = repo[mask]
@@ -231,9 +247,9 @@ def split() -> None:
 
     files = load_csv(File.AVAILABLE_FILES)
     files = files.drop('dedup_key', axis=1)
-    columns = ['repository_language', 'repository_dirname']
+    repo_columns = ['repository_language', 'repository_dirname']
 
-    repo = files[columns].drop_duplicates()
+    repo = files[repo_columns].drop_duplicates()
     repo = repo.sample(frac=1).reset_index(drop=True)
     repo.loc[:, 'usage'] = ''
 
@@ -287,7 +303,7 @@ def split() -> None:
             raise RuntimeError(f'No repositories for category: {name}')
 
     repo = pd.concat(repositories.values())
-    files = pd.merge(files, repo, on=columns)
+    files = pd.merge(files, repo, on=repo_columns)
     save_csv(files, File.FILES_SPLIT_BY_USAGE)
 
 
@@ -303,17 +319,22 @@ def extract() -> None:
     valid_path.mkdir(exist_ok=True)
     test_path.mkdir(exist_ok=True)
 
+    # Load list of files to extract
     source = load_csv(File.FILES_SPLIT_BY_USAGE)
-    columns = [
-        'extract_to', 'filename', 'language', 'rank', 'repository_dirname',
-        'repository_language', 'usage', 'status']
+
+    # Load list of processed files
     try:
         files = load_csv(File.EXTRACTED_FILES)
     except IOError:
-        files = pd.DataFrame([], columns=columns)
+        files = pd.DataFrame([], columns=EXTRACTED_FILES_COLUMNS)
 
     df = pd.merge(source, files, how='outer', on=list(source.columns))
     df.loc[df['status'].isnull(), 'status'] = Status.PENDING.value
+
+    # Flag existing files
+    is_pending = df['status'] == Status.PENDING.value
+    file_exists = df.apply(_destination_exists, axis=1)
+    df.loc[(is_pending & file_exists), 'status'] = Status.DISCARDED.value
 
     while True:
         selected = _choose_files_to_extract(df)
@@ -348,6 +369,12 @@ def extract() -> None:
     LOGGER.info(f'The training files are located in {train_path}')
     LOGGER.info(f'The validation files are located in {valid_path}')
     LOGGER.info(f'The test files are located in {test_path}')
+
+
+def _destination_exists(item: Dict[str, str]):
+    usage = item['usage']
+    extract_to = item['extract_to']
+    return Config.extracted_files_dir.joinpath(usage, extract_to).exists()
 
 
 def _choose_files_to_extract(df: pd.DataFrame) -> pd.DataFrame:
@@ -388,12 +415,16 @@ def _choose_files_to_extract(df: pd.DataFrame) -> pd.DataFrame:
     return chosen
 
 
-def _extract_files(input_data: pd.DataFrame) -> pd.DataFrame:
-    results = []
-    grouped = input_data.groupby('repository_dirname')
+def _extract_files(df: pd.DataFrame) -> pd.DataFrame:
+    grouped = df.groupby('repository_dirname')
     nb_groups = len(grouped)
+    simple_groups = (
+        (dirname, [dict(repo_info) for _, repo_info in items.iterrows()])
+        for dirname, items in grouped
+    )
 
-    pool = pool_map(_extract_from_repository, grouped, multiplier=2)
+    results = []
+    pool = pool_map(_extract_from_repository, simple_groups, multiplier=2)
     for index, grouped_results in enumerate(pool, 1):
         results.append(grouped_results)
         if index % Config.step == 0:
@@ -406,59 +437,54 @@ def _extract_files(input_data: pd.DataFrame) -> pd.DataFrame:
 
 
 def _extract_from_repository(
-    grouped_args: Tuple[str, pd.DataFrame],
-) -> pd.DataFrame:
-    repository_dirname, items = grouped_args
+    params: Tuple[str, List[Dict[str, str]]],
+) -> List[Dict[str, str]]:
+    repository_dirname, items = params
     repository_path = Config.repositories_dir.joinpath(repository_dirname)
 
     result = run(GIT_DISABLE_GC, stdout=PIPE, stderr=PIPE, cwd=repository_path)
     if result.returncode != 0:
         LOGGER.debug(f'Failed to disable GC in {repository_path}')
 
-    filenames = set(items['filename'])
+    filenames = set(item['filename'] for item in items)
     command = GIT_RESET_FILES + list(filenames)
     result = run(command, stdout=PIPE, stderr=PIPE, cwd=repository_path)
     if result.returncode != 0:
         LOGGER.debug(f'Failed to reset files from {repository_path}')
 
-    def extract_file(item: Dict[str, str]) -> Dict[str, Any]:
-        usage = item['usage']
-        filename = item['filename']
-        basename = item['extract_to']
-        destination = Config.extracted_files_dir.joinpath(usage, basename)
+    return [_move_file(repository_path, item) for item in items]
 
-        ko = {'extract_to': basename, 'status': Status.DISCARDED.value}
-        ok = {'extract_to': basename, 'status': Status.EXTRACTED.value}
 
-        if destination.exists():
-            LOGGER.debug(f'File already extracted {destination}')
+def _move_file(repository_path: Path, item: Dict[str, str]) -> Dict[str, Any]:
+    usage = item['usage']
+    filename = item['filename']
+    basename = item['extract_to']
+    ko = {'extract_to': basename, 'status': Status.DISCARDED.value}
+    ok = {'extract_to': basename, 'status': Status.EXTRACTED.value}
+
+    source = repository_path.joinpath(filename)
+    try:
+        content = source.read_bytes()
+        source.unlink()
+    except OSError:
+        LOGGER.debug(f'Unreachable file {source}')
+        return ko
+
+    try:
+        text = content.decode('utf-8')
+    except UnicodeDecodeError:
+        LOGGER.debug(f'Non UTF-8 text {repository_path}: {filename}')
+        detected = chardet.detect(content)
+        if detected['confidence'] < MIN_ENCODING_CONFIDENCE:
+            LOGGER.debug(f'Bad Encoding {repository_path}: {filename}')
             return ko
 
-        source = repository_path.joinpath(filename)
         try:
-            content = source.read_bytes()
-            source.unlink()
-        except OSError:
-            LOGGER.debug(f'Unreachable file {source}')
+            text = content.decode(detected['encoding'])
+        except (UnicodeDecodeError, LookupError):
+            LOGGER.debug(f'Bad Encoding {repository_path}: {filename}')
             return ko
 
-        try:
-            text = content.decode('utf-8')
-        except UnicodeDecodeError:
-            LOGGER.debug(f'Non UTF-8 text {repository_path}: {filename}')
-            detected = chardet.detect(content)
-            if detected['confidence'] < MIN_ENCODING_CONFIDENCE:
-                LOGGER.debug(f'Bad Encoding {repository_path}: {filename}')
-                return ko
-
-            try:
-                text = content.decode(detected['encoding'])
-            except (UnicodeDecodeError, LookupError):
-                LOGGER.debug(f'Bad Encoding {repository_path}: {filename}')
-                return ko
-
-        destination.write_text(text)
-        return ok
-
-    result = items.apply(extract_file, axis=1)
-    return result
+    destination = Config.extracted_files_dir.joinpath(usage, basename)
+    destination.write_text(text)
+    return ok

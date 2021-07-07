@@ -3,7 +3,7 @@ from functools import wraps
 from http.client import IncompleteRead
 import json
 import logging
-from multiprocessing import Pool, cpu_count
+from multiprocessing import get_context, cpu_count
 from pathlib import Path
 import signal
 from ssl import SSLError
@@ -215,7 +215,8 @@ def pool_map(
 
     processes = multiplier * cpu_count() if multiplier else None
     iterable = ((method, item, method_args, method_kw) for item in items)
-    with Pool(processes, initializer=_initializer) as pool:
+    context = get_context('spawn')
+    with context.Pool(processes, initializer=_initializer) as pool:
         for result in pool.imap_unordered(_apply, iterable):
             yield result
 
