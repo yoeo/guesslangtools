@@ -12,7 +12,9 @@ from unittest.mock import patch
 import warnings
 from zipfile import ZipFile
 
-from guesslangtools.common import Config, File, absolute
+from pytest import fixture
+
+from guesslangtools.common import Config, File
 from guesslangtools.app import run_workflow
 from guesslangtools.workflow.repositories_dataset import DATASET_FILENAME
 from guesslangtools.workflow.source_files import Status
@@ -48,9 +50,10 @@ GIT_SETUP_COMMANDS = """
 # Helpers
 
 
-def generate_dataset(_, destination):
+def generate_dataset(config):
+    destination = config.absolute(File.COMPRESSED_DATASET)
     csv_lines = [REPO_LIST_HEADERS]
-    for lang, exts in Config.languages.items():
+    for lang, exts in config.languages.items():
         ext = exts[0]
         for pos in range(REPO_PER_LANG):
             full_name = f'user_{ext}/repo_{pos:02}'
@@ -65,10 +68,10 @@ def generate_dataset(_, destination):
     return True, 200
 
 
-def create_repositories(_, rows, *__, **___):
+def create_repositories(_, rows, config, *__, **___):
     for item in rows:
         # Generate repository files
-        path = Config.repositories_dir.joinpath(item['repository_dirname'])
+        path = config.repositories_dir.joinpath(item['repository_dirname'])
         path.mkdir()
 
         data_dir = path.joinpath('data')
@@ -78,7 +81,7 @@ def create_repositories(_, rows, *__, **___):
         src_dir = path.joinpath('src')
         src_dir.mkdir()
 
-        for lang, exts in Config.languages.items():
+        for lang, exts in config.languages.items():
             lang_dir = src_dir.joinpath(lang)
             lang_dir.mkdir()
             lang_dir.joinpath('file.txt').write_text('text {lang}')
@@ -99,11 +102,11 @@ def create_repositories(_, rows, *__, **___):
         yield item
 
 
-def check_files():
-    path = absolute(File.EXTRACTED_FILES)
+def check_files(config):
+    path = config.absolute(File.EXTRACTED_FILES)
     assert path.exists()
 
-    languages = Config.languages
+    languages = config.languages
     files = {lang: 0 for lang in languages}
 
     with path.open() as csv_file:
@@ -113,7 +116,7 @@ def check_files():
 
             language = item['language']
             path_elements = ('files', item['usage'], item['extract_to'])
-            extracted_path = absolute(*path_elements)
+            extracted_path = config.absolute(*path_elements)
             ext = extracted_path.suffix.lstrip('.')
 
             assert extracted_path.exists()
@@ -126,41 +129,35 @@ def check_files():
         assert nb_files == FILES_PER_LANG, message
 
 
-# Tests
+# Test
 
-
-def setup_function(_):
-    tempdir = mkdtemp(suffix='_gesslangtools_unittest')
+@fixture()
+def config():
+    tempdir = mkdtemp(prefix='guesslangtools_unittest_')
     print(f'Temporary config directory: {tempdir}')
-    Config.setup(
+    config = Config(
         cache_dir=tempdir,
         nb_repositories=REPO_PER_LANG,
         nb_train=FILES_PER_LANG_PER_DATASET,
         nb_valid=FILES_PER_LANG_PER_DATASET,
         nb_test=FILES_PER_LANG_PER_DATASET,
     )
-
-    assert Config.cache_dir == tempdir
-
-
-def teardown_function(_):
-    assert Config.cache_dir
-    assert Config.cache_dir.endswith('_gesslangtools_unittest')
-
-    #rmtree(Config.cache_dir)
+    assert config.cache_dir == tempdir
+    yield config
+    rmtree(config.cache_dir)
 
 
 @patch(
-    'guesslangtools.workflow.repositories_dataset.download_file',
+    'guesslangtools.workflow.repositories_dataset.download',
     generate_dataset,
 )
 @patch(
     'guesslangtools.workflow.github_repositories.pool_map',
     create_repositories,
 )
-def test_workflow(caplog):
+def test_workflow(config, caplog):
     caplog.set_level(logging.INFO)
     warnings.filterwarnings('error', module='pandas')
 
-    run_workflow()
-    check_files()
+    run_workflow(config)
+    check_files(config)

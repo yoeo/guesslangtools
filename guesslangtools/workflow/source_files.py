@@ -1,5 +1,6 @@
 from contextlib import suppress
 from enum import Enum, auto
+from functools import partial
 from itertools import groupby
 import logging
 from operator import itemgetter
@@ -14,9 +15,7 @@ from zipfile import ZipFile, BadZipFile
 import chardet
 import pandas as pd
 
-from guesslangtools.common import (
-    Config, File, cached, load_csv, save_csv, pool_map
-)
+from guesslangtools.common import Config, File, cached, pool_map
 
 
 LOGGER = logging.getLogger(__name__)
@@ -37,7 +36,7 @@ AVAILABLE_FILES_COLUMNS = [
     'language',
     'rank',
     'repository_dirname',
-    'repository_language',  # FIXME
+    'repository_language',
 ]
 
 EXTRACTED_FILES_COLUMNS = [
@@ -70,13 +69,13 @@ class Status(Enum):
 
 # Always (re-)generates File.AVAILABLE_FILES
 @cached(File.FILES_SPLIT_BY_USAGE)
-def list_all() -> None:
+def list_all(config: Config) -> None:
     LOGGER.info('List source files from repositories')
     LOGGER.info('This operation might take several minutes...')
 
-    repo = load_csv(File.DOWNLOADED_REPOSITORIES)
+    repo = config.load_csv(File.DOWNLOADED_REPOSITORIES)
     try:
-        files = load_csv(File.AVAILABLE_FILES)
+        files = config.load_csv(File.AVAILABLE_FILES)
     except IOError:
         files = pd.DataFrame([], columns=AVAILABLE_FILES_COLUMNS)
 
@@ -91,34 +90,35 @@ def list_all() -> None:
     nb_removed = nb_repo_before - nb_repo_after
     LOGGER.info(f'{nb_removed} deleted repositories')
 
-    new_files = _list_files_by_language(new_repo)
+    new_files = _list_files_by_language(config, new_repo)
     df = pd.concat([files, new_files], axis=0, sort=False)
 
     df.drop_duplicates(subset='dedup_key', inplace=True)
     df.sort_values(by='rank', inplace=True)
 
     LOGGER.info('Files available by language:')
-    for language in Config.languages:
+    for language in config.languages:
         nb_files = len(df[df['language'] == language])
         LOGGER.info(f'--> {language}: {nb_files}')
 
-    save_csv(df, File.AVAILABLE_FILES)
+    config.save_csv(df, File.AVAILABLE_FILES)
 
 
-def _list_files_by_language(repo: pd.DataFrame) -> pd.DataFrame:
-    languages = Config.languages
-    nb_files_limit = Config.max_files_per_repository_per_language
+def _list_files_by_language(config: Config, repo: pd.DataFrame) -> pd.DataFrame:
+    languages = config.languages
+    nb_files_limit = config.max_files_per_repository_per_language
     ext_lang, ambiguous = _analyse_languages(languages)
     total_repo = len(repo)
 
     results = []
     rows = (dict(item) for _, item in repo.iterrows())
-    args = (languages, ext_lang, ambiguous, nb_files_limit)
+    args = (languages, ext_lang, ambiguous, nb_files_limit, config)
+
     for index, result in enumerate(pool_map(_select_files, rows, *args)):
         if result:
             results.append(result)
 
-        if index % Config.step == 0:
+        if index % config.step == 0:
             LOGGER.info(f'--> Processed {index} / {total_repo} repositories...')
     LOGGER.info(f'--> Processed {total_repo} / {total_repo} repositories!')
 
@@ -135,11 +135,12 @@ def _select_files(
     ext_lang: Dict[str, str],
     ambiguous: Dict[str, List[str]],
     nb_files_limit: int,
+    config: Config,
 ) -> List[Dict[str, Any]]:
     repository_language = item['repository_language']
     repository_dirname = item['repository_dirname']
 
-    files = _list_compressed_files(repository_dirname)
+    files = _list_compressed_files(config, repository_dirname)
     random.shuffle(files)
 
     output_items = []
@@ -168,8 +169,10 @@ def _select_files(
     return output_items
 
 
-def _list_compressed_files(repository_dirname: str) -> List[Tuple[str, str]]:
-    repository_path = Config.repositories_dir.joinpath(repository_dirname)
+def _list_compressed_files(
+    config: Config, repository_dirname: str
+) -> List[Tuple[str, str]]:
+    repository_path = config.repositories_dir.joinpath(repository_dirname)
 
     try:
         raw_result = check_output(
@@ -241,11 +244,11 @@ def _find_language(
 
 
 @cached(File.FILES_SPLIT_BY_USAGE)
-def split() -> None:
+def split(config: Config) -> None:
     LOGGER.info('Split repositories by usage: train, valid & test')
     LOGGER.info('This operation should take few seconds...')
 
-    files = load_csv(File.AVAILABLE_FILES)
+    files = config.load_csv(File.AVAILABLE_FILES)
     files = files.drop('dedup_key', axis=1)
     repo_columns = ['repository_language', 'repository_dirname']
 
@@ -256,18 +259,18 @@ def split() -> None:
     LOGGER.info(f'Total downloaded repositories: {len(repo)}')
 
     total_files = (
-        Config.nb_train_files_per_language
-        + Config.nb_valid_files_per_language
-        + Config.nb_test_files_per_language
+        config.nb_train_files_per_language
+        + config.nb_valid_files_per_language
+        + config.nb_test_files_per_language
     )
-    valid_ratio = Config.nb_valid_files_per_language / total_files
+    valid_ratio = config.nb_valid_files_per_language / total_files
     valid_ratio = max(valid_ratio, MIN_SPLIT_RATIO)
 
-    test_ratio = Config.nb_test_files_per_language / total_files
+    test_ratio = config.nb_test_files_per_language / total_files
     test_ratio = max(test_ratio, MIN_SPLIT_RATIO)
 
     repositories = {}
-    for language in Config.languages:
+    for language in config.languages:
         by_language = repo[repo['repository_language'] == language]
         total = len(by_language)
         if total < MIN_REPOSITORIES:
@@ -304,27 +307,27 @@ def split() -> None:
 
     repo = pd.concat(repositories.values())
     files = pd.merge(files, repo, on=repo_columns)
-    save_csv(files, File.FILES_SPLIT_BY_USAGE)
+    config.save_csv(files, File.FILES_SPLIT_BY_USAGE)
 
 
-def extract() -> None:
+def extract(config: Config) -> None:
     LOGGER.info('Extract selected files')
     LOGGER.info('This operation might take a lot of time...')
 
-    train_path = Config.extracted_files_dir.joinpath('train')
-    valid_path = Config.extracted_files_dir.joinpath('valid')
-    test_path = Config.extracted_files_dir.joinpath('test')
+    train_path = config.extracted_files_dir.joinpath('train')
+    valid_path = config.extracted_files_dir.joinpath('valid')
+    test_path = config.extracted_files_dir.joinpath('test')
 
     train_path.mkdir(exist_ok=True)
     valid_path.mkdir(exist_ok=True)
     test_path.mkdir(exist_ok=True)
 
     # Load list of files to extract
-    source = load_csv(File.FILES_SPLIT_BY_USAGE)
+    source = config.load_csv(File.FILES_SPLIT_BY_USAGE)
 
     # Load list of processed files
     try:
-        files = load_csv(File.EXTRACTED_FILES)
+        files = config.load_csv(File.EXTRACTED_FILES)
     except IOError:
         files = pd.DataFrame([], columns=EXTRACTED_FILES_COLUMNS)
 
@@ -333,17 +336,17 @@ def extract() -> None:
 
     # Flag existing files
     is_pending = df['status'] == Status.PENDING.value
-    file_exists = df.apply(_destination_exists, axis=1)
+    file_exists = df.apply(partial(_destination_exists, config), axis=1)
     df.loc[(is_pending & file_exists), 'status'] = Status.DISCARDED.value
 
     while True:
-        selected = _choose_files_to_extract(df)
+        selected = _choose_files_to_extract(config, df)
         LOGGER.info(f'{len(selected)} files to extract')
 
         if not len(selected):
             break
 
-        result = _extract_files(selected)
+        result = _extract_files(config, selected)
 
         result_extracted = result[result['status'] == Status.EXTRACTED.value]
         mask = df['extract_to'].isin(result_extracted['extract_to'])
@@ -364,31 +367,31 @@ def extract() -> None:
         LOGGER.info(f'{len(extracted)} total files extracted')
         LOGGER.info(f'{len(discarded)} total files discarded')
 
-    save_csv(df, File.EXTRACTED_FILES)
+    config.save_csv(df, File.EXTRACTED_FILES)
 
     LOGGER.info(f'The training files are located in {train_path}')
     LOGGER.info(f'The validation files are located in {valid_path}')
     LOGGER.info(f'The test files are located in {test_path}')
 
 
-def _destination_exists(item: Dict[str, str]):
+def _destination_exists(config: Config, item: Dict[str, str]) -> bool:
     usage = item['usage']
     extract_to = item['extract_to']
-    return Config.extracted_files_dir.joinpath(usage, extract_to).exists()
+    return config.extracted_files_dir.joinpath(usage, extract_to).exists()
 
 
-def _choose_files_to_extract(df: pd.DataFrame) -> pd.DataFrame:
+def _choose_files_to_extract(config: Config, df: pd.DataFrame) -> pd.DataFrame:
     usage_info = {
-        'train': Config.nb_train_files_per_language,
-        'valid': Config.nb_valid_files_per_language,
-        'test': Config.nb_test_files_per_language,
+        'train': config.nb_train_files_per_language,
+        'valid': config.nb_valid_files_per_language,
+        'test': config.nb_test_files_per_language,
     }
 
     files = []
     mask_pending = df['status'] == Status.PENDING.value
     mask_extracted = df['status'] == Status.EXTRACTED.value
 
-    for lang in Config.languages:
+    for lang in config.languages:
         mask_lang = df['language'] == lang
 
         for usage, nb_files in usage_info.items():
@@ -415,7 +418,7 @@ def _choose_files_to_extract(df: pd.DataFrame) -> pd.DataFrame:
     return chosen
 
 
-def _extract_files(df: pd.DataFrame) -> pd.DataFrame:
+def _extract_files(config: Config, df: pd.DataFrame) -> pd.DataFrame:
     grouped = df.groupby('repository_dirname')
     nb_groups = len(grouped)
     simple_groups = (
@@ -424,10 +427,12 @@ def _extract_files(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     results = []
-    pool = pool_map(_extract_from_repository, simple_groups, multiplier=2)
+    pool = pool_map(
+        _extract_from_repository, simple_groups, config, multiplier=2
+    )
     for index, grouped_results in enumerate(pool, 1):
         results.append(grouped_results)
-        if index % Config.step == 0:
+        if index % config.step == 0:
             LOGGER.info(f'--> Processed {index} / {nb_groups} repositories...')
     LOGGER.info(f'--> Processed {nb_groups} / {nb_groups} repositories!')
 
@@ -438,9 +443,10 @@ def _extract_files(df: pd.DataFrame) -> pd.DataFrame:
 
 def _extract_from_repository(
     params: Tuple[str, List[Dict[str, str]]],
+    config: Config,
 ) -> List[Dict[str, str]]:
     repository_dirname, items = params
-    repository_path = Config.repositories_dir.joinpath(repository_dirname)
+    repository_path = config.repositories_dir.joinpath(repository_dirname)
 
     result = run(GIT_DISABLE_GC, stdout=PIPE, stderr=PIPE, cwd=repository_path)
     if result.returncode != 0:
@@ -452,10 +458,12 @@ def _extract_from_repository(
     if result.returncode != 0:
         LOGGER.debug(f'Failed to reset files from {repository_path}')
 
-    return [_move_file(repository_path, item) for item in items]
+    return [_move_file(config, repository_path, item) for item in items]
 
 
-def _move_file(repository_path: Path, item: Dict[str, str]) -> Dict[str, Any]:
+def _move_file(
+    config: Config, repository_path: Path, item: Dict[str, str]
+) -> Dict[str, Any]:
     usage = item['usage']
     filename = item['filename']
     basename = item['extract_to']
@@ -485,6 +493,6 @@ def _move_file(repository_path: Path, item: Dict[str, str]) -> Dict[str, Any]:
             LOGGER.debug(f'Bad Encoding {repository_path}: {filename}')
             return ko
 
-    destination = Config.extracted_files_dir.joinpath(usage, basename)
+    destination = config.extracted_files_dir.joinpath(usage, basename)
     destination.write_text(text)
     return ok

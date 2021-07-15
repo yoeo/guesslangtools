@@ -6,9 +6,7 @@ from typing import Dict
 
 import pandas as pd
 
-from guesslangtools.common import (
-    absolute, File, cached, download_file, load_csv
-)
+from guesslangtools.common import Config, File, cached, download_file
 
 
 LOGGER = logging.getLogger(__name__)
@@ -28,34 +26,34 @@ OTHER_REPO_DATASET_PATH = PKG_ROOT.joinpath('data', 'other_repositories.csv')
 
 
 @cached(File.COMPRESSED_DATASET)
-def download() -> None:
+def download(config: Config) -> None:
     LOGGER.info('Retrieving repositories dataset (8GB)')
     LOGGER.info('This operation might take a lot of time...')
 
-    destination = absolute(File.COMPRESSED_DATASET)
+    destination = config.absolute(File.COMPRESSED_DATASET)
     download_file(DATASET_URL, destination)
 
 
 @cached(File.DATASET)
-def extract() -> None:
+def extract(config: Config) -> None:
     LOGGER.info('Extracting repositories list file')
     LOGGER.info('This operation might take several minutes...')
 
-    compressed_filename = absolute(File.COMPRESSED_DATASET)
+    compressed_filename = config.absolute(File.COMPRESSED_DATASET)
     with tarfile.open(compressed_filename) as tar:
-        tar.extract(DATASET_FILENAME, path=absolute('.'))
+        tar.extract(DATASET_FILENAME, path=config.absolute('.'))
 
-    extracted_file = absolute(DATASET_FILENAME)
-    extracted_file.rename(absolute(File.DATASET))
+    extracted_file = config.absolute(DATASET_FILENAME)
+    extracted_file.rename(config.absolute(File.DATASET))
 
 
 @cached(File.SHRUNK_DATASET)
-def shrink() -> None:
+def shrink(config: Config) -> None:
     LOGGER.info('Shrink repositories list file')
     LOGGER.info('This operation might take several minutes...')
 
-    input_path = absolute(File.DATASET)
-    output_path = absolute(File.SHRUNK_DATASET)
+    input_path = config.absolute(File.DATASET)
+    output_path = config.absolute(File.SHRUNK_DATASET)
 
     # The input dataset is too huge to be fully loaded into memory
     csv.field_size_limit(CSV_FIELD_LIMIT)
@@ -85,13 +83,13 @@ def _ignore(item: Dict[str, str]) -> bool:
 
 
 @cached(File.ALTERED_DATASET)
-def alter() -> None:
+def alter(config: Config) -> None:
     LOGGER.info('Alter repositories list file')
     LOGGER.info('This operation might take several minutes...')
 
-    output_path = absolute(File.ALTERED_DATASET)
+    output_path = config.absolute(File.ALTERED_DATASET)
 
-    df = load_csv(File.SHRUNK_DATASET)
+    df = config.load_csv(File.SHRUNK_DATASET)
 
     # Set repositories with no language as Markdown repositories.
     # Because most of Github repositories have a Readme.md file.

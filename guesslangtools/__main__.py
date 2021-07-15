@@ -115,7 +115,7 @@ def main() -> None:
     LOGGING_CONFIG['root']['level'] = log_level
     logging.config.dictConfig(LOGGING_CONFIG)
 
-    Config.setup(
+    config = Config(
         cache_dir=args.CACHE_DIR,
         nb_repositories=args.nb_repo,
         nb_train=args.nb_train_files,
@@ -125,26 +125,26 @@ def main() -> None:
 
     with suppress(KeyboardInterrupt):
         if hack_args:
-            run_hacks(args)
+            run_hacks(config, args)
         else:
-            run_workflow()
+            run_workflow(config)
 
 
-def run_hacks(args: Namespace) -> None:
+def run_hacks(config: Config, args: Namespace) -> None:
     if args.hack_repo_dist:
-        hacks.show_repositories_distribution()
+        hacks.show_repositories_distribution(config)
 
     if args.hack_add_repo:
-        hacks.select_more_repositories(args.hack_add_repo)
+        hacks.select_more_repositories(config, args.hack_add_repo)
 
     if args.hack_download_repo_list:
-        hacks.download_github_repo_list(*args.hack_download_repo_list)
+        hacks.download_github_repo_list(config, *args.hack_download_repo_list)
 
     if args.hack_merge_repo_list:
-        hacks.merge_to_selected_repositories(args.hack_merge_repo_list)
+        hacks.merge_to_selected_repositories(config, args.hack_merge_repo_list)
 
     if args.hack_only_use_downloaded_repo:
-        hacks.select_only_downloaded_repo()
+        hacks.select_only_downloaded_repo(config)
 
 
 if __name__ == '__main__':

@@ -64,37 +64,51 @@ class Config:
     repositories_dir = NULL_PATH
     extracted_files_dir = NULL_PATH
 
-    @classmethod
-    def setup(
-        cls,
+    def __init__(
+        self,
         cache_dir: str,
         nb_repositories: int,
         nb_train: int,
         nb_valid: int,
         nb_test: int,
     ) -> None:
-        """Set configuration."""
-        cls.nb_train_files_per_language = nb_train
-        cls.nb_valid_files_per_language = nb_valid
-        cls.nb_test_files_per_language = nb_test
-        cls.nb_repositories_per_language = nb_repositories
-        cls.cache_dir = cache_dir
-        cls.repositories_dir = absolute('repositories')
-        cls.extracted_files_dir = absolute('files')
+        """Setup configuration."""
+        self.nb_train_files_per_language = nb_train
+        self.nb_valid_files_per_language = nb_valid
+        self.nb_test_files_per_language = nb_test
+        self.nb_repositories_per_language = nb_repositories
+        self.cache_dir = cache_dir
+        self.repositories_dir = self.absolute('repositories')
+        self.extracted_files_dir = self.absolute('files')
 
-        Path(cls.cache_dir).mkdir(exist_ok=True)
-        Path(cls.repositories_dir).mkdir(exist_ok=True)
-        Path(cls.extracted_files_dir).mkdir(exist_ok=True)
+        Path(self.cache_dir).mkdir(exist_ok=True)
+        Path(self.repositories_dir).mkdir(exist_ok=True)
+        Path(self.extracted_files_dir).mkdir(exist_ok=True)
 
         root_path = Path(__file__).parent
         languages_path = root_path.joinpath('data', LANGUAGES_FILENAME)
         with languages_path.open() as languages_file:
-            cls.languages = json.load(languages_file)
+            self.languages = json.load(languages_file)
 
+    def absolute(self, *path_parts: str) -> Path:
+        """Create an absolute path."""
+        return Path(self.cache_dir, *path_parts).absolute()
 
-def absolute(*path_parts: str) -> Path:
-    """Create an absolute path."""
-    return Path(Config.cache_dir, *path_parts).absolute()
+    def load_csv(self, filename: str) -> pd.DataFrame:
+        """Load a CSV file."""
+        fullname = self.absolute(filename)
+        return pd.read_csv(fullname)
+
+    def save_csv(self, df: pd.DataFrame, filename: str) -> None:
+        """Save a DataFrame to a CSV file."""
+        fullname = self.absolute(filename)
+        df.to_csv(fullname, index=False)
+
+    @staticmethod
+    def remove_from_cache(path: Path) -> None:
+        if path.is_file():
+            path.unlink()
+            LOGGER.info(f'Removed cache file: {path}')
 
 
 def cached(location: str) -> Callable[[Function], Function]:
@@ -103,26 +117,26 @@ def cached(location: str) -> Callable[[Function], Function]:
     def wrapper(func: Function) -> Function:
 
         @wraps(func)
-        def wrapped(*args: Any, **kw: Any) -> Any:
+        def wrapped(config: Config, *args: Any, **kw: Any) -> Any:
 
-            if not Config.cache_dir:
+            if not config.cache_dir:
                 raise RuntimeError('Cache directory not set')
 
-            path = absolute(location)
-            if Config.bypass_cache:
-                _remove_from_cache(path)
+            path = config.absolute(location)
+            if config.bypass_cache:
+                config.remove_from_cache(path)
 
             if path.exists():
                 LOGGER.info(f'Found in the cache: {path}')
                 return
 
-            Config.bypass_cache = True
+            config.bypass_cache = True
             try:
-                result = func(*args, **kw)
+                result = func(config, *args, **kw)
                 LOGGER.info(f'Created cache file: {path}')
                 return result
             except (Exception, KeyboardInterrupt):
-                _remove_from_cache(path)
+                config.remove_from_cache(path)
                 raise
 
         return cast(Function, wrapped)
@@ -136,26 +150,20 @@ def requires(location: str) -> Callable[[Function], Function]:
     def wrapper(func: Function) -> Function:
 
         @wraps(func)
-        def wrapped(*args: Any, **kw: Any) -> Any:
+        def wrapped(config: Config, *args: Any, **kw: Any) -> Any:
 
-            path = absolute(location)
+            path = config.absolute(location)
             if not path.exists():
                 LOGGER.error(f'Cache file missing: {path}')
                 raise RuntimeError(f'Requires cache file {path}')
 
             LOGGER.info(f'Found in the cache: {path}')
-            result = func(*args, **kw)
+            result = func(config, *args, **kw)
             return result
 
         return cast(Function, wrapped)
 
     return wrapper
-
-
-def _remove_from_cache(path: Path) -> None:
-    if path.is_file():
-        path.unlink()
-        LOGGER.info(f'Removed cache file: {path}')
 
 
 def download_file(url: str, destination: Path) -> Tuple[bool, int]:
@@ -190,20 +198,6 @@ def _remove_if_possible(path: Path) -> None:
         path.unlink()
 
 
-def load_csv(filename: str) -> pd.DataFrame:
-    """Load a CSV file."""
-
-    fullname = absolute(filename)
-    return pd.read_csv(fullname)
-
-
-def save_csv(df: pd.DataFrame, filename: str) -> None:
-    """Save a DataFrame to a CSV file."""
-
-    fullname = absolute(filename)
-    df.to_csv(fullname, index=False)
-
-
 def pool_map(
     method: Function,
     items: Iterable[Any],
@@ -235,7 +229,6 @@ def _initializer() -> None:
 
 def backup(filename: str) -> None:
     """Create a backup of a given file"""
-
     current_path = absolute(filename)
     backup_path = absolute(f'{filename}.bkp')
 

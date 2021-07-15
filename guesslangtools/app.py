@@ -1,18 +1,19 @@
+from guesslangtools.common import Config
 from guesslangtools.workflow import repositories_dataset
 from guesslangtools.workflow import github_repositories
 from guesslangtools.workflow import source_files
 
 
-def run_workflow() -> None:
-    repositories_dataset.download()
-    repositories_dataset.extract()
-    repositories_dataset.shrink()
-    repositories_dataset.alter()
+def run_workflow(config: Config) -> None:
+    repositories_dataset.download(config)
+    repositories_dataset.extract(config)
+    repositories_dataset.shrink(config)
+    repositories_dataset.alter(config)
 
-    github_repositories.select()
-    github_repositories.prepare()
-    github_repositories.download()
+    github_repositories.select(config)
+    github_repositories.prepare(config)
+    github_repositories.download(config)
 
-    source_files.list_all()
-    source_files.split()
-    source_files.extract()
+    source_files.list_all(config)
+    source_files.split(config)
+    source_files.extract(config)
