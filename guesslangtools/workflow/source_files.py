@@ -28,6 +28,7 @@ GIT_LIST_FILES = ['git', 'ls-tree', '-r', 'HEAD']
 GIT_RESET_FILES = ['git', 'checkout', 'HEAD']
 GIT_DISABLE_GC = ['git', 'config', 'gc.auto', '0']
 GIT_RESET_FILES = ['timeout', '600', 'git', 'checkout', 'HEAD']
+GIT_EMPTY_FILE_KEY = '0xe69de29bb2d1d6434b8b29ae775ad8c2e48c5391'
 
 AVAILABLE_FILES_COLUMNS = [
     'extract_to',
@@ -146,6 +147,9 @@ def _select_files(
     output_items = []
     files_per_lang = {lang: 0 for lang in languages}
     for filename, dedup_key in files:
+        if dedup_key == GIT_EMPTY_FILE_KEY:
+            continue
+
         lang = _find_language(
             filename, ext_lang, ambiguous, repository_language
         )
