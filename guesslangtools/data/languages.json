@@ -34,7 +34,7 @@
   "OCaml": ["ml", "mli", "ml4", "eliom", "sml"],
   "Pascal": ["pas", "pp", "dfm", "dpr", "pascal"],
   "Perl": ["pm", "pl", "p6", "raku", "pl6", "rakumod", "psgi"],
-  "PHP": ["php", "php3", "php4", "php4", "php5", "phpt"],
+  "PHP": ["php", "php3", "php4", "php5", "phpt"],
   "PowerShell": ["ps1", "psm1"],
   "Prolog": ["prolog", "pl"],
   "Python": ["py", "gyp", "py3", "gypi", "pyde", "pyi", "pyw"],

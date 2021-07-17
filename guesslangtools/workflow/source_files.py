@@ -192,7 +192,11 @@ def _list_compressed_files(
 
     compressed_files = []
     for info in result.split('\n'):
-        _, _, dedup, filename = info.strip().split(maxsplit=3)
+        try:
+            _, _, dedup, filename = info.strip().split(maxsplit=3)
+        except ValueError:  # empty filename
+            continue
+
         dedup_key = f'0x{dedup}'
         compressed_files.append((filename, dedup_key))
     return compressed_files
