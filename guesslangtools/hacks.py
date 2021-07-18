@@ -6,7 +6,7 @@ from typing import List
 import pandas as pd
 import requests
 
-from guesslangtools.common import File, Config, requires, backup
+from guesslangtools.common import File, Config, requires
 
 
 LOGGER = logging.getLogger(__name__)
@@ -36,8 +36,6 @@ def show_repositories_distribution(config: Config) -> None:
 def select_more_repositories(config: Config, languages: List[str]) -> None:
     LOGGER.info('Choose more repositories per language')
     LOGGER.info('This operation might take several minutes...')
-
-    output_path = config.absolute(File.SELECTED_REPOSITORIES)
 
     input_data = config.load_csv(File.ALTERED_DATASET)
     known = config.load_csv(File.SELECTED_REPOSITORIES)
@@ -83,13 +81,13 @@ def select_more_repositories(config: Config, languages: List[str]) -> None:
         LOGGER.error('No repository found')
         raise RuntimeError('No repository found')
 
-    backup(File.SELECTED_REPOSITORIES)
+    config.backup(File.SELECTED_REPOSITORIES)
     with suppress(IOError):
-        backup(File.PREPARED_REPOSITORIES)
+        config.backup(File.PREPARED_REPOSITORIES)
 
     new_repositories = pd.concat(selected_list)
     united = known.append(new_repositories)
-    united.to_csv(output_path, index=False)
+    config.save_csv(united, File.SELECTED_REPOSITORIES)
 
 
 @requires(File.SELECTED_REPOSITORIES)
@@ -109,8 +107,8 @@ def select_only_downloaded_repo(config: Config) -> None:
 
     LOGGER.info(f'{len(selected)} downloaded repositories selected')
 
-    backup(File.SELECTED_REPOSITORIES)
-    backup(File.PREPARED_REPOSITORIES)
+    config.backup(File.SELECTED_REPOSITORIES)
+    config.backup(File.PREPARED_REPOSITORIES)
     config.save_csv(selected, File.SELECTED_REPOSITORIES)
     config.save_csv(prepared, File.PREPARED_REPOSITORIES)
 
@@ -123,10 +121,10 @@ def merge_to_selected_repositories(config: Config, filename: str) -> None:
     selected = pd.concat([listed, selected])
     selected = selected.drop_duplicates('repository_name')
 
-    backup(File.SELECTED_REPOSITORIES)
+    config.backup(File.SELECTED_REPOSITORIES)
     config.save_csv(selected, File.SELECTED_REPOSITORIES)
     with suppress(IOError):
-        backup(File.PREPARED_REPOSITORIES)
+        config.backup(File.PREPARED_REPOSITORIES)
 
 
 def download_github_repo_list(

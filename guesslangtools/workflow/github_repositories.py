@@ -97,23 +97,22 @@ def download(config: Config) -> None:
     LOGGER.info('This operation might take a lot of time...')
 
     input_data = config.load_csv(File.PREPARED_REPOSITORIES)
-    total_repo = len(input_data)
 
+    input_data.loc[:, 'repository_is_empty'] = True
     rows = (dict(row) for _, row in input_data.iterrows())
     result_rows = []
+    total = len(input_data)
     for step, row in enumerate(pool_map(_clone_repository, rows, config), 1):
         result_rows.append(row)
         if step % config.step == 0:
-            LOGGER.info(f'--> Processed {step} / {total_repo} repositories...')
-    LOGGER.info(f'--> Processed {total_repo} / {total_repo} repositories!')
+            LOGGER.info(f'--> Processed {step} / {total} repositories...')
+    LOGGER.info(f'--> Processed {total} / {total} repositories!')
 
-    LOGGER.info(f'Checking for empty repositories')
     data = pd.DataFrame(result_rows)
 
-    data.loc[:, 'repository_size'] = 0
-    data = data.apply(partial(_check_size, config), axis=1)
-    data = data[data['repository_size'] != 0]
-    data = data[data['repository_dirname'] != '']
+    LOGGER.info(f'Removing empty repositories')
+    data = data[~data['repository_is_empty']]
+    LOGGER.info(f'Kept {len(data)} non empty repositories')
 
     fieldnames = ['repository_language', 'repository_dirname']
     output_data = data[fieldnames]
@@ -121,7 +120,7 @@ def download(config: Config) -> None:
     output_data.to_csv(output_path, index=False)
 
 
-def _clone_repository(item: Dict[str, str], config: Config) -> Dict[str, str]:
+def _clone_repository(item: Dict[str, Any], config: Config) -> Dict[str, str]:
     url = item['repository_url']
     path = config.repositories_dir.joinpath(item['repository_dirname'])
 
@@ -129,15 +128,8 @@ def _clone_repository(item: Dict[str, str], config: Config) -> Dict[str, str]:
         LOGGER.debug(f'Downloading {url}')
         command = GIT_CLONE_COMMAND + [url, str(path)]
         result = run(command, stdout=PIPE, stderr=PIPE)
-        if GIT_CLONE_ERROR in result.stdout:
-            path.mkdir()
-        if result.returncode != 0:
-            item['repository_dirname'] = ''
+        if result.returncode != 0 or GIT_CLONE_ERROR in result.stdout:
+            path.mkdir(exist_ok=True)
 
-    return item
-
-
-def _check_size(config: Config, item: Dict[str, Any]) -> Dict[str, Any]:
-    path = config.repositories_dir.joinpath(item['repository_dirname'])
-    item['repository_size'] = 1 if any(path.iterdir()) else 0
+    item['repository_is_empty'] = not any(path.iterdir())
     return item

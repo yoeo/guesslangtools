@@ -121,6 +121,17 @@ class Config:
         fullname = self.absolute(filename)
         df.to_csv(fullname, index=False)
 
+    def backup(self, filename: str) -> None:
+        """Create a backup of a given file"""
+        current_path = self.absolute(filename)
+        backup_path = self.absolute(f'{filename}.bkp')
+
+        with suppress(IOError):
+            backup_path.unlink()
+
+        current_path.replace(backup_path)
+        LOGGER.info(f'Backup: {current_path} to {backup_path}')
+
     @staticmethod
     def remove_from_cache(path: Path) -> None:
         if path.is_file():
@@ -264,15 +275,3 @@ def _apply(
 
 def _initializer() -> None:
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-
-def backup(filename: str) -> None:
-    """Create a backup of a given file"""
-    current_path = absolute(filename)
-    backup_path = absolute(f'{filename}.bkp')
-
-    with suppress(IOError):
-        backup_path.unlink()
-
-    current_path.replace(backup_path)
-    LOGGER.info(f'Backup: {current_path} to {backup_path}')

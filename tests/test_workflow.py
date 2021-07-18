@@ -108,6 +108,7 @@ def create_repositories(_, rows, config, *__, **___):
             git_command = shlex.split(line.strip())
             check_output(git_command, cwd=path, stderr=STDOUT)
 
+        item['repository_is_empty'] = not any(path.iterdir())
         yield item
 
 

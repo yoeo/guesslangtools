@@ -52,7 +52,7 @@ def main() -> None:
     parser.add_argument(
         '--nb-repo',
         type=int,
-        default=4000,
+        default=8000,
         help='number of repositories per language',
     )
     parser.add_argument(
