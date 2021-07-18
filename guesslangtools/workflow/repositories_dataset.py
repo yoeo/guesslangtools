@@ -6,7 +6,9 @@ from typing import Dict
 
 import pandas as pd
 
-from guesslangtools.common import Config, File, cached, download_file
+from guesslangtools.common import (
+    Config, File, cached, download_file, CSV_FIELD_LIMIT
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -19,7 +21,6 @@ DATASET_URL = (
     'https://zenodo.org/record/3626071/files/'
     'libraries-1.6.0-2020-01-12.tar.gz?download=1'
 )
-CSV_FIELD_LIMIT = 10 * 1024 * 1024  # 1O MiB
 
 PKG_ROOT = Path(__file__).parent.parent
 OTHER_REPO_DATASET_PATH = PKG_ROOT.joinpath('data', 'other_repositories.csv')

@@ -31,6 +31,7 @@ NULL_PATH = Path('/dev/null')
 LANGUAGES_FILENAME = 'languages.yaml'
 CHUNK_SIZE = 1024
 TIMEOUT = 30
+CSV_FIELD_LIMIT = 10 * 1024 * 1024  # 1O MiB
 
 
 class File:
@@ -170,7 +171,8 @@ def cached(location: str) -> Callable[[Function], Function]:
             config.bypass_cache = True
             try:
                 result = func(config, *args, **kw)
-                LOGGER.info(f'Created cache file: {path}')
+                if path.exists():
+                    LOGGER.info(f'Created cache file: {path}')
                 return result
             except (Exception, KeyboardInterrupt):
                 config.remove_from_cache(path)

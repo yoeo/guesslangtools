@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from contextlib import suppress
+import csv
 from enum import Enum, auto
 from functools import partial
 from itertools import groupby
@@ -17,7 +18,9 @@ from zipfile import ZipFile, BadZipFile
 import chardet
 import pandas as pd
 
-from guesslangtools.common import Config, File, cached, pool_map
+from guesslangtools.common import (
+    Config, File, cached, pool_map, CSV_FIELD_LIMIT
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -82,7 +85,6 @@ def list_all(config: Config) -> None:
         files = config.load_csv(File.AVAILABLE_FILES)
     except IOError:
         files = pd.DataFrame([], columns=AVAILABLE_FILES_COLUMNS)
-        config.save_csv(files, File.AVAILABLE_FILES)  # write headers
 
     # Find repositories that have not been processed yet
     mask = ~repo['repository_dirname'].isin(files['repository_dirname'])
@@ -100,14 +102,24 @@ def list_all(config: Config) -> None:
     # List unprocessed repositories files
     total = len(new_repo)
     rows = (dict(repo) for _, repo in new_repo.iterrows())
-    with config.absolute(File.AVAILABLE_FILES).open('a') as output:
+
+    output_path = config.absolute(File.AVAILABLE_FILES)
+    write_headers = not output_path.exists()
+    csv.field_size_limit(CSV_FIELD_LIMIT)
+    with output_path.open('a') as output_file:
+        writer = csv.DictWriter(output_file, fieldnames=AVAILABLE_FILES_COLUMNS)
+        if write_headers:
+            writer.writeheader()
+
         for index, result in enumerate(pool_map(_list_files, rows, config)):
-            lines = _to_csv_lines(result, AVAILABLE_FILES_COLUMNS)
-            output.write(f'{lines}\n')
+            for item in result:
+                writer.writerow(item)
 
             if index % config.step == 0:
                 LOGGER.info(f'--> Processed {index} / {total} repositories...')
         LOGGER.info(f'--> Processed {total} / {total} repositories!')
+
+    LOGGER.info(f'Created file: {output_path}')
 
 
 def _list_files(item: Dict[str, str], config: Config):
@@ -204,13 +216,6 @@ def _find_language(
         return repository_language
 
     return None
-
-
-def _to_csv_lines(files_info, columns):
-    lines = []
-    for info in files_info:
-        lines.append(','.join(str(info[col]) for col in columns))
-    return '\n'.join(lines)
 
 
 @cached(File.DEDUPLICATED_FILES)
