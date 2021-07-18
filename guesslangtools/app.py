@@ -15,5 +15,7 @@ def run_workflow(config: Config) -> None:
     github_repositories.download(config)
 
     source_files.list_all(config)
+    source_files.deduplicate(config)
     source_files.split(config)
     source_files.extract(config)
+    source_files.finalize(config)

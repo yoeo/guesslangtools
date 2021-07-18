@@ -39,19 +39,18 @@ def select(config: Config) -> None:
     max_repositories = config.nb_repositories_per_language
 
     selected_list = []
-    for language in config.languages:
-        filtered = shuffled[shuffled['repository_language'] == language]
+    for lang in config.languages:
+        filtered = shuffled[shuffled['repository_language'] == lang]
         nb_found = len(filtered)
         nb_selected = min(nb_found, max_repositories)
 
         LOGGER.info(
-            f'{language} repositories, found: {nb_found}, kept: {nb_selected}'
+            f'{lang} repositories, found: {nb_found}, kept: {nb_selected}'
         )
 
         if nb_selected < max_repositories:
             LOGGER.warning(
-                f'{language}, not enough repositories, '
-                f'required: {max_repositories}'
+                f'{lang}, not enough repositories, required: {max_repositories}'
             )
 
         if nb_selected == 0:

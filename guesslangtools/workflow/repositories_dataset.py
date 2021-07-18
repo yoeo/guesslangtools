@@ -96,9 +96,11 @@ def alter(config: Config) -> None:
     mask = df['repository_language'].isnull()
     df.loc[mask, 'repository_language'] = 'Markdown'
 
-    # Unite all flavours of Lisp
-    mask = df['repository_language'].isin(['Emacs Lisp', 'Common Lisp'])
-    df.loc[mask, 'repository_language'] = 'Lisp'
+    # Handle language aliases
+    for alias, languages in config.alias_mapping.items():
+        lang = languages[0]
+        mask = df['repository_language'] == alias
+        df.loc[mask, 'repository_language'] = lang
 
     # There are too few repositories for some languages.
     # To mitigate this problem, a list of known repositories

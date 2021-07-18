@@ -1,7 +1,6 @@
 from contextlib import suppress
 from functools import wraps
 from http.client import IncompleteRead
-import json
 import logging
 from multiprocessing import get_context, cpu_count
 from pathlib import Path
@@ -22,13 +21,14 @@ from typing import (
 
 import pandas as pd
 import requests
+from yaml import safe_load
 
 
 LOGGER = logging.getLogger(__name__)
 Function = TypeVar('Function', bound=Callable[..., Any])
 
 NULL_PATH = Path('/dev/null')
-LANGUAGES_FILENAME = 'languages.json'
+LANGUAGES_FILENAME = 'languages.yaml'
 CHUNK_SIZE = 1024
 TIMEOUT = 30
 
@@ -45,8 +45,9 @@ class File:
     DOWNLOADED_REPOSITORIES = '07_downloaded_repositories.csv'
 
     AVAILABLE_FILES = '08_available_files.csv'
-    FILES_SPLIT_BY_USAGE = '09_files_split_by_usage.csv'
-    EXTRACTED_FILES = '10_extracted_files.csv'
+    DEDUPLICATED_FILES = '09_deduplicated_files.csv'
+    FILES_SPLIT_BY_USAGE = '10_files_split_by_usage.csv'
+    EXTRACTED_FILES = '11_extracted_files.csv'
 
 
 class Config:
@@ -87,8 +88,23 @@ class Config:
 
         root_path = Path(__file__).parent
         languages_path = root_path.joinpath('data', LANGUAGES_FILENAME)
-        with languages_path.open() as languages_file:
-            self.languages = json.load(languages_file)
+        content = languages_path.read_text()
+        language_info = safe_load(content)
+        self.languages = list(language_info)
+        self.alias_mapping = self._map_values(language_info, 'aliases', False)
+        self.file_mapping = self._map_values(language_info, 'files')
+        self.ext_mapping = self._map_values(language_info, 'extensions')
+
+        self.extensions = {}
+        for lang, info in language_info.items():
+            ext = info['extensions'][0]
+            languages = self.ext_mapping[ext]
+            if len(languages) > 1:
+                raise RuntimeError(
+                    f'"{ext}" is used by multiple languages {languages}. '
+                    f'Please change the first extension of {lang}'
+                )
+            self.extensions[lang] = ext
 
     def absolute(self, *path_parts: str) -> Path:
         """Create an absolute path."""
@@ -109,6 +125,27 @@ class Config:
         if path.is_file():
             path.unlink()
             LOGGER.info(f'Removed cache file: {path}')
+
+    @staticmethod
+    def _map_values(language_info, fieldname, duplicates_ok=True):
+        result = {}
+        for lang, info in language_info.items():
+            for value in info[fieldname]:
+                result.setdefault(value, []).append(lang)
+
+        # Check mapping
+        for value, languages in result.items():
+            if len(languages) > 1:
+                message = (
+                    f'Checking {fieldname}: "{value}" is associated with '
+                    f'more than one language: {languages}'
+                )
+                if duplicates_ok:
+                    LOGGER.warning(message)
+                else:
+                    raise RuntimeError(message)
+
+        return result
 
 
 def cached(location: str) -> Callable[[Function], Function]:

@@ -1,0 +1,582 @@
+# Based on
+# https://github.com/github/linguist/blob/master/lib/linguist/languages.yml
+
+Assembly:
+  aliases: []
+  extensions:
+  - asm
+  - s
+  - nasm
+  - a51
+  - agc
+  files: []
+
+Batchfile:
+  aliases: []
+  extensions:
+  - bat
+  - cmd
+  - btm
+  files: []
+
+C:
+  aliases: []
+  extensions:
+  - c
+  - h
+  files: []
+
+C#:
+  aliases: []
+  extensions:
+  - cs
+  files: []
+
+C++:
+  aliases: []
+  extensions:
+  - cpp
+  - c++
+  - cxx
+  - cc
+  - tcc
+  - tpp
+  - hpp
+  - hh
+  - hxx
+  - h
+  files: []
+
+Clojure:
+  aliases: []
+  extensions:
+  - clj
+  - cljs
+  - cljc
+  - cljx
+  files: []
+
+CMake:
+  aliases: []
+  extensions:
+  - cmake
+  files:
+  - CMakeLists.txt
+
+COBOL:
+  aliases: []
+  extensions:
+  - cbl
+  - cobol
+  - cob
+  - cpy
+  files: []
+
+CoffeeScript:
+  aliases: []
+  extensions:
+  - coffee
+  - iced
+  - _coffee
+  - cson
+  - cjsx
+  files:
+  - Cakefile
+
+CSS:
+  aliases: []
+  extensions:
+  - css
+  files: []
+
+CSV:
+  aliases: []
+  extensions:
+  - csv
+  files: []
+
+Dart:
+  aliases: []
+  extensions:
+  - dart
+  files: []
+
+DM:
+  aliases: []
+  extensions:
+  - dm
+  files: []
+
+Dockerfile:
+  aliases: []
+  extensions:
+  - dockerfile
+  files:
+  - Dockerfile
+
+Elixir:
+  aliases: []
+  extensions:
+  - ex
+  - exs
+  files:
+  - mix.lock
+
+Erlang:
+  aliases: []
+  extensions:
+  - erl
+  - hrl
+  - escript
+  files:
+  - Emakefile
+  - rebar.config
+  - rebar.lock
+
+Fortran:
+  aliases:
+  - FORTRAN
+  extensions:
+  - f90
+  - f95
+  - f77
+  - f03
+  - f08
+  - fpp
+  - f
+  files: []
+
+Go:
+  aliases: []
+  extensions:
+  - go
+  files: []
+
+Groovy:
+  aliases: []
+  extensions:
+  - groovy
+  - gvy
+  - jenkinsfile
+  - jenkins
+  - nf
+  - gradle
+  files:
+  - Jenkinsfile
+
+Haskell:
+  aliases: []
+  extensions:
+  - hs
+  - hsc
+  - hs-boot
+  files: []
+
+HTML:
+  aliases: []
+  extensions:
+  - html
+  - xhtml
+  - htm
+  - xht
+  files: []
+
+INI:
+  aliases: []
+  extensions:
+  - ini
+  - properties
+  - lektorproject
+  - dof
+  - prefs
+  files:
+  - buildozer.spec
+
+Java:
+  aliases: []
+  extensions:
+  - java
+  files: []
+
+JavaScript:
+  aliases: []
+  extensions:
+  - js
+  - es6
+  - javascript
+  - jsx
+  files:
+  - Jakefile
+
+JSON:
+  aliases: []
+  extensions:
+  - json
+  - avsc
+  - geojson
+  - gltf
+  - har
+  - jsonl
+  - mcmeta
+  - tfstate
+  - topojson
+  - webmanifest
+  - yy
+  - yyp
+  files:
+  - ".arcconfig"
+  - ".htmlhintrc"
+  - ".tern-project"
+  - Pipfile.lock
+  - composer.lock
+  - mcmod.info
+  - manifest.webapp
+
+Julia:
+  aliases: []
+  extensions:
+  - jl
+  files: []
+
+Kotlin:
+  aliases: []
+  extensions:
+  - kt
+  - kts
+  files: []
+
+Lisp:
+  aliases:
+  - Common Lisp
+  - Emacs Lisp
+  extensions:
+  - lisp
+  - lsp
+  - el
+  - asd
+  - sexp
+  files: []
+
+Lua:
+  aliases: []
+  extensions:
+  - lua
+  - pd_lua
+  - wlua
+  - nse
+  - p8
+  files:
+  - ".luacheckrc"
+
+Makefile:
+  aliases: []
+  extensions:
+  - makefile
+  - mkfile
+  - mk
+  files:
+  - Makefile
+  - Makefile.am
+  - Makefile.in
+  - Makefile.boot
+  - Makefile.frag
+  - Makefile.inc
+  - Makefile.wat
+  - Makefile.sco
+  - GNUmakefile
+  - GNUmakefile.am
+  - GNUmakefile.in
+  - BSDmakefile
+  - Kbuild
+  - mkfile
+
+Markdown:
+  aliases: []
+  extensions:
+  - md
+  - markdown
+  - mdown
+  - mkd
+  - mdx
+  - mkdn
+  - ronn
+  files: []
+
+Matlab:
+  aliases: []
+  extensions:
+  - matlab
+  - m
+  files: []
+
+Objective-C:
+  aliases: []
+  extensions:
+  - mm
+  - m
+  - h
+  files: []
+
+OCaml:
+  aliases: []
+  extensions:
+  - ml
+  - mli
+  - ml4
+  - eliom
+  - sml
+  files: []
+
+Pascal:
+  aliases:
+  - Delphi
+  extensions:
+  - pas
+  - pp
+  - dfm
+  - dpr
+  - pascal
+  files: []
+
+Perl:
+  aliases:
+  - Perl6
+  - Perl 6
+  extensions:
+  - pm
+  - pl
+  - p6
+  - raku
+  - pl6
+  - rakumod
+  - psgi
+  - perl
+  files:
+  - Makefile.PL
+  - cpanfile
+
+PHP:
+  aliases:
+  - Hack
+  extensions:
+  - php
+  - php3
+  - php4
+  - php5
+  - phpt
+  - hh
+  - hhi
+  files: []
+
+PowerShell:
+  aliases: []
+  extensions:
+  - ps1
+  - psm1
+  files: []
+
+Prolog:
+  aliases: []
+  extensions:
+  - prolog
+  - pl
+  files: []
+
+Python:
+  aliases: []
+  extensions:
+  - py
+  - gyp
+  - py3
+  - gypi
+  - pyde
+  - pyi
+  - pyw
+  files:
+  - wscript
+  - SConscript
+  - SConstruct
+
+R:
+  aliases: []
+  extensions:
+  - r
+  files: []
+
+Ruby:
+  aliases: []
+  extensions:
+  - rb
+  - ruby
+  - builder
+  - gemspec
+  - god
+  - jbuilder
+  - podspec
+  - prawn
+  - rabl
+  - rake
+  - rbi
+  - rbw
+  - rbx
+  - ru
+  - thor
+  - watchr
+  files:
+  - Rakefile
+  - Appraisals
+  - Berksfile
+  - Brewfile
+  - Capfile
+  - Dangerfile
+  - Deliverfile
+  - Fastfile
+  - Gemfile
+  - Guardfile
+  - Podfile
+  - Puppetfile
+  - Snapfile
+  - Thorfile
+  - Vagrantfile
+
+Rust:
+  aliases: []
+  extensions:
+  - rs
+  files: []
+
+Scala:
+  aliases: []
+  extensions:
+  - scala
+  - kojo
+  - sbt
+  files: []
+
+Shell:
+  aliases: []
+  extensions:
+  - sh
+  - bash
+  - bats
+  - command
+  - env
+  - ksh
+  - zsh
+  - tmux
+  - tool
+  files:
+  - ".bash_aliases"
+  - ".bash_history"
+  - ".bash_logout"
+  - ".bash_profile"
+  - ".bahrc"
+  - ".env"
+  - ".env.example"
+  - ".flaskenv"
+  - ".zlogin"
+  - ".zlogout"
+  - ".zprofile"
+  - ".zshenv"
+  - ".zshrc"
+  - PKGBUILD
+  - gradlew
+
+SQL:
+  aliases:
+  - HiveQL
+  extensions:
+  - sql
+  - tsql
+  - hql
+  - mysql
+  files: []
+
+Swift:
+  aliases: []
+  extensions:
+  - swift
+  files: []
+
+TeX:
+  aliases: []
+  extensions:
+  - tex
+  - aux
+  - bbx
+  - cbx
+  - dtx
+  - lbx
+  - mkii
+  - mkiv
+  - mkvi
+  - sty
+  files: []
+
+TOML:
+  aliases: []
+  extensions:
+  - toml
+  files:
+  - Cargo.lock
+  - Gopkg.lock
+  - Pipfile
+  - poetry.lock
+
+TypeScript:
+  aliases: []
+  extensions:
+  - ts
+  - tsx
+  files: []
+
+Verilog:
+  aliases:
+  - SystemVerilog
+  extensions:
+  - v
+  - veo
+  - sv
+  - svh
+  - vh
+  files: []
+
+Visual Basic:
+  aliases: []
+  extensions:
+  - vba
+  - vb
+  - bas
+  - vbs
+  files: []
+
+XML:
+  aliases: []
+  extensions:
+  - xml
+  - adml
+  - admx
+  - xul
+  - xsd
+  - fxml
+  - glade
+  files:
+  - ".classpath"
+  - ".cproject"
+  - App.config
+  - NuGet.config
+  - Settings.StyleCop
+  - Web.Debug.config
+  - Web.Release.config
+  - Web.config
+  - packages.config
+
+YAML:
+  aliases: []
+  extensions:
+  - yaml
+  - yml
+  - reek
+  - mir
+  - rviz
+  files: []

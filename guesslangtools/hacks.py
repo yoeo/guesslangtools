@@ -49,27 +49,27 @@ def select_more_repositories(config: Config, languages: List[str]) -> None:
     max_repositories = config.nb_repositories_per_language
 
     selected_list = []
-    for language in languages:
-        if language not in config.languages:
-            LOGGER.error(f'Unknown language {language}')
-            raise RuntimeError(f'Unknown language {language}')
+    for lang in languages:
+        if lang not in config.languages:
+            LOGGER.error(f'Unknown language {lang}')
+            raise RuntimeError(f'Unknown language {lang}')
 
-        pending = shuffled[shuffled['repository_language'] == language]
-        nb_known = len(known[known['repository_language'] == language])
+        pending = shuffled[shuffled['repository_language'] == lang]
+        nb_known = len(known[known['repository_language'] == lang])
         nb_pending = len(pending)
         nb_required = max(max_repositories-nb_known, 0)
         nb_selected = min(nb_pending, nb_required)
         total = nb_known + nb_selected
 
         LOGGER.info(
-            f'{language}: repositories per language: {max_repositories}, '
+            f'{lang}: repositories per language: {max_repositories}, '
             f'pending: {nb_pending}, known: {nb_known}, '
             f'selected: {nb_selected}, total: {total}'
         )
 
         if total < max_repositories:
             LOGGER.warning(
-                f'{language}, not enough repositories, '
+                f'{lang}, not enough repositories, '
                 f'required: {max_repositories}'
             )
 
@@ -130,9 +130,9 @@ def merge_to_selected_repositories(config: Config, filename: str) -> None:
 
 
 def download_github_repo_list(
-    config: Config, token: str, language: str, filename: str
+    config: Config, token: str, lang: str, filename: str
 ) -> None:
-    LOGGER.info(f'Listing repositories for language {language}')
+    LOGGER.info(f'Listing repositories for language {lang}')
     with open(filename, 'w') as output:
         output.write('repository_name,repository_language\n')
 
@@ -140,7 +140,7 @@ def download_github_repo_list(
         for page in range(1, MAX_PAGES+1):
             LOGGER.info(f'Processing page {page: 3} / {MAX_PAGES}')
             url = (
-                f'{GITHUB_API_URL}?access_token={token}&q=language:{language}'
+                f'{GITHUB_API_URL}?access_token={token}&q=language:{lang}'
                 f'&per_page={PER_PAGE}&page={page}&sort=updated&order=desc'
             )
             response = requests.get(url)
@@ -157,7 +157,7 @@ def download_github_repo_list(
                     continue
 
                 known_repos.add(repo_id)
-                output.write(f'{repo_name},{language}\n')
+                output.write(f'{repo_name},{lang}\n')
 
             time.sleep(GITHUB_DELAY)
     LOGGER.info(f'{len(known_repos)} repositories saved in {filename}')

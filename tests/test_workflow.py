@@ -53,10 +53,9 @@ GIT_SETUP_COMMANDS = """
 def generate_dataset(config):
     destination = config.absolute(File.COMPRESSED_DATASET)
     csv_lines = [REPO_LIST_HEADERS]
-    for lang, exts in config.languages.items():
-        ext = exts[0]
+    for lang, ext in config.extensions.items():
         for pos in range(REPO_PER_LANG):
-            full_name = f'user_{ext}/repo_{pos:02}'
+            full_name = f'lang_{ext}/repo_{pos:02}'
             csv_lines.append(REPO_LINE.format(full_name=full_name, lang=lang))
 
     csv_bytes = '\n'.join(csv_lines).encode()
@@ -81,18 +80,28 @@ def create_repositories(_, rows, config, *__, **___):
         src_dir = path.joinpath('src')
         src_dir.mkdir()
 
-        for lang, exts in config.languages.items():
+        for lang, ext in config.extensions.items():
             lang_dir = src_dir.joinpath(lang)
             lang_dir.mkdir()
+
+            # Create plain text file => should be ignored
             lang_dir.joinpath('file.txt').write_text('text {lang}')
 
-            ext = exts[0]
+            # Create binary file => should be ignored
             noise = token_bytes(30)
             lang_dir.joinpath(f'binary_00.{ext}').write_bytes(noise)
+
+            # Create source file => should be kept
             for index in range(FILES_PER_LANG_PER_REPO):
                 content = f'{path}:{lang}:{index:02}'
                 filename = f'unicode_{index:02}.{ext}'
                 lang_dir.joinpath(filename).write_text(content)
+
+            # Create source file with exact name => should be kept
+            for filename, languages in config.file_mapping.items():
+                if lang in languages:
+                    content = f'{path}:{lang}:{filename}'
+                    lang_dir.joinpath(filename).write_text(content)
 
         # Setup git shallow repository
         for line in GIT_SETUP_COMMANDS.strip().splitlines():
@@ -106,23 +115,21 @@ def check_files(config):
     path = config.absolute(File.EXTRACTED_FILES)
     assert path.exists()
 
-    languages = config.languages
-    files = {lang: 0 for lang in languages}
-
+    files = {lang: 0 for lang in config.languages}
     with path.open() as csv_file:
         for item in DictReader(csv_file):
             if not item['status'] == Status.EXTRACTED.value:
                 continue
 
-            language = item['language']
+            lang = item['language']
             path_elements = ('files', item['usage'], item['extract_to'])
             extracted_path = config.absolute(*path_elements)
             ext = extracted_path.suffix.lstrip('.')
 
             assert extracted_path.exists()
-            assert ext in languages[language]
+            assert ext == config.extensions[lang]
 
-            files[language] += 1
+            files[lang] += 1
 
     for lang, nb_files in files.items():
         message = f'Lang {lang}, expected: {FILES_PER_LANG}, found: {nb_files}'
@@ -143,8 +150,10 @@ def config():
         nb_test=FILES_PER_LANG_PER_DATASET,
     )
     assert config.cache_dir == tempdir
-    yield config
-    rmtree(config.cache_dir)
+    try:
+        yield config
+    finally:
+        rmtree(config.cache_dir)
 
 
 @patch(

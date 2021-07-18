@@ -1,7 +1,9 @@
+from collections import OrderedDict
 from contextlib import suppress
 from enum import Enum, auto
 from functools import partial
 from itertools import groupby
+import json
 import logging
 from operator import itemgetter
 from pathlib import Path
@@ -69,21 +71,25 @@ class Status(Enum):
 
 
 # Always (re-)generates File.AVAILABLE_FILES
-@cached(File.FILES_SPLIT_BY_USAGE)
+@cached(File.DEDUPLICATED_FILES)
 def list_all(config: Config) -> None:
     LOGGER.info('List source files from repositories')
     LOGGER.info('This operation might take several minutes...')
 
+    # Start or resume files listing
     repo = config.load_csv(File.DOWNLOADED_REPOSITORIES)
     try:
         files = config.load_csv(File.AVAILABLE_FILES)
     except IOError:
         files = pd.DataFrame([], columns=AVAILABLE_FILES_COLUMNS)
+        config.save_csv(files, File.AVAILABLE_FILES)  # write headers
 
+    # Find repositories that have not been processed yet
     mask = ~repo['repository_dirname'].isin(files['repository_dirname'])
     new_repo = repo[mask]
     LOGGER.info(f'{len(new_repo)} newly downloaded repositories')
 
+    # Show the number of deleted repositories
     nb_repo_before = len(files['repository_dirname'].unique())
     mask = files['repository_dirname'].isin(repo['repository_dirname'])
     files = files[mask]
@@ -91,93 +97,66 @@ def list_all(config: Config) -> None:
     nb_removed = nb_repo_before - nb_repo_after
     LOGGER.info(f'{nb_removed} deleted repositories')
 
-    new_files = _list_files_by_language(config, new_repo)
-    df = pd.concat([files, new_files], axis=0, sort=False)
+    # List unprocessed repositories files
+    total = len(new_repo)
+    rows = (dict(repo) for _, repo in new_repo.iterrows())
+    with config.absolute(File.AVAILABLE_FILES).open('a') as output:
+        for index, result in enumerate(pool_map(_list_files, rows, config)):
+            lines = _to_csv_lines(result, AVAILABLE_FILES_COLUMNS)
+            output.write(f'{lines}\n')
 
-    df.drop_duplicates(subset='dedup_key', inplace=True)
-    df.sort_values(by='rank', inplace=True)
-
-    LOGGER.info('Files available by language:')
-    for language in config.languages:
-        nb_files = len(df[df['language'] == language])
-        LOGGER.info(f'--> {language}: {nb_files}')
-
-    config.save_csv(df, File.AVAILABLE_FILES)
-
-
-def _list_files_by_language(config: Config, repo: pd.DataFrame) -> pd.DataFrame:
-    languages = config.languages
-    nb_files_limit = config.max_files_per_repository_per_language
-    ext_lang, ambiguous = _analyse_languages(languages)
-    total_repo = len(repo)
-
-    results = []
-    rows = (dict(item) for _, item in repo.iterrows())
-    args = (languages, ext_lang, ambiguous, nb_files_limit, config)
-
-    for index, result in enumerate(pool_map(_select_files, rows, *args)):
-        if result:
-            results.append(result)
-
-        if index % config.step == 0:
-            LOGGER.info(f'--> Processed {index} / {total_repo} repositories...')
-    LOGGER.info(f'--> Processed {total_repo} / {total_repo} repositories!')
-
-    LOGGER.info('Saving source files info')
-    flattened = (file_info for result in results for file_info in result)
-
-    output_data = pd.DataFrame(flattened)
-    return output_data
+            if index % config.step == 0:
+                LOGGER.info(f'--> Processed {index} / {total} repositories...')
+        LOGGER.info(f'--> Processed {total} / {total} repositories!')
 
 
-def _select_files(
-    item: Dict[str, str],
-    languages: Dict[str, List[str]],
-    ext_lang: Dict[str, str],
-    ambiguous: Dict[str, List[str]],
-    nb_files_limit: int,
-    config: Config,
-) -> List[Dict[str, Any]]:
+def _list_files(item: Dict[str, str], config: Config):
+    max_files = config.max_files_per_repository_per_language
     repository_language = item['repository_language']
     repository_dirname = item['repository_dirname']
+    repository_path = config.repositories_dir.joinpath(repository_dirname)
 
-    files = _list_compressed_files(config, repository_dirname)
+    files = _repository_files(repository_path)
     random.shuffle(files)
 
-    output_items = []
-    files_per_lang = {lang: 0 for lang in languages}
+    result = []
+    file_counter = {lang: 0 for lang in config.languages}
     for filename, dedup_key in files:
         if dedup_key == GIT_EMPTY_FILE_KEY:
             continue
 
-        lang = _find_language(
-            filename, ext_lang, ambiguous, repository_language
-        )
-
-        if not lang or files_per_lang[lang] >= nb_files_limit:
+        if filename.endswith('/'):
             continue
 
-        ext = languages[lang][0]
-        extract_to_filename = f'{uuid4()}.{ext}'
+        lang = _find_language(
+            filename,
+            repository_language,
+            config.ext_mapping,
+            config.file_mapping,
+        )
 
-        files_per_lang[lang] += 1
-        output_items.append({
-            'language': lang,
-            'repository_language': repository_language,
-            'repository_dirname': repository_dirname,
-            'filename': filename,
-            'dedup_key': dedup_key,
-            'extract_to': extract_to_filename,
-            'rank': files_per_lang[lang],
-        })
-    return output_items
+        if not lang or file_counter[lang] >= max_files:
+            continue
+
+        file_counter[lang] += 1
+        extracted_ext = config.extensions[lang]
+        extract_to_filename = f'{uuid4()}.{extracted_ext}'
+        result.append(
+            {
+                'language': lang,
+                'repository_language': repository_language,
+                'repository_dirname': repository_dirname,
+                'filename': filename,
+                'dedup_key': dedup_key,
+                'extract_to': extract_to_filename,
+                'rank': file_counter[lang],
+            }
+        )
+
+    return result
 
 
-def _list_compressed_files(
-    config: Config, repository_dirname: str
-) -> List[Tuple[str, str]]:
-    repository_path = config.repositories_dir.joinpath(repository_dirname)
-
+def _repository_files(repository_path: Path) -> List[Tuple[str, str]]:
     try:
         raw_result = check_output(
             GIT_LIST_FILES, cwd=repository_path, stderr=PIPE
@@ -202,53 +181,50 @@ def _list_compressed_files(
     return compressed_files
 
 
-def _analyse_languages(
-    languages: Dict[str, List[str]]
-) -> Tuple[Dict[str, str], Dict[str, List[str]]]:
-    key = itemgetter(0)
-    couples = ((ext, lang) for lang, exts in languages.items() for ext in exts)
-    groups = groupby(sorted(couples, key=key), key=key)
-    ext_lang_data = ((ext, [lang for _, lang in info]) for ext, info in groups)
-    ext_languages = dict(ext_lang_data)
-
-    ambiguous = {}
-    ext_lang = {}
-    for ext, langs in ext_languages.items():
-        if len(ext_languages[ext]) == 1:
-            ext_lang[ext] = langs[0]
-        elif len(ext_languages[ext]) > 1:
-            ambiguous[ext] = langs
-
-    if ambiguous:
-        LOGGER.warning(f'Ambiguous extensions found: {ambiguous}')
-
-    for ext, langs in ambiguous.items():
-        for lang in langs:
-            if languages[lang][0] == lang:
-                raise RuntimeError(
-                    f'Ambiguous extension {ext} cannot be the first'
-                    'file extension defined for language {lang}')
-
-    return ext_lang, ambiguous
-
-
 def _find_language(
     filename: str,
-    ext_lang: Dict[str, str],
-    ambiguous: Dict[str, List[str]],
     repository_language: str,
+    ext_mapping: Dict[str, List[str]],
+    file_mapping: Dict[str, List[str]],
 ) -> Optional[str]:
-    if filename.endswith('/'):
-        return None
+    path = Path(filename)
 
-    ext = Path(filename).suffix.lstrip('.').lower()
-    if ext in ext_lang:
-        return ext_lang[ext]
+    basename = path.name
+    languages = file_mapping.get(basename, [])
+    if len(languages) == 1:
+        return languages[0]
+    elif repository_language in languages:
+        return repository_language
 
-    elif repository_language in ambiguous.get(ext, []):
+    ext = path.suffix.lstrip('.').lower()
+    languages = ext_mapping.get(ext, [])
+    if len(languages) == 1:
+        return languages[0]
+    elif repository_language in languages:
         return repository_language
 
     return None
+
+
+def _to_csv_lines(files_info, columns):
+    lines = []
+    for info in files_info:
+        lines.append(','.join(str(info[col]) for col in columns))
+    return '\n'.join(lines)
+
+
+@cached(File.DEDUPLICATED_FILES)
+def deduplicate(config: Config) -> None:
+    df = config.load_csv(File.AVAILABLE_FILES)
+    df.drop_duplicates(subset='dedup_key', inplace=True)
+    df.sort_values(by='rank', inplace=True)
+
+    LOGGER.info('Files available by language:')
+    for lang in config.languages:
+        nb_files = len(df[df['language'] == lang])
+        LOGGER.info(f'--> {lang}: {nb_files}')
+
+    config.save_csv(df, File.DEDUPLICATED_FILES)
 
 
 @cached(File.FILES_SPLIT_BY_USAGE)
@@ -256,7 +232,7 @@ def split(config: Config) -> None:
     LOGGER.info('Split repositories by usage: train, valid & test')
     LOGGER.info('This operation should take few seconds...')
 
-    files = config.load_csv(File.AVAILABLE_FILES)
+    files = config.load_csv(File.DEDUPLICATED_FILES)
     files = files.drop('dedup_key', axis=1)
     repo_columns = ['repository_language', 'repository_dirname']
 
@@ -278,13 +254,13 @@ def split(config: Config) -> None:
     test_ratio = max(test_ratio, MIN_SPLIT_RATIO)
 
     repositories = {}
-    for language in config.languages:
-        by_language = repo[repo['repository_language'] == language]
+    for lang in config.languages:
+        by_language = repo[repo['repository_language'] == lang]
         total = len(by_language)
         if total < MIN_REPOSITORIES:
             raise RuntimeError(
                 f'Need more than {MIN_REPOSITORIES}, '
-                f'only {total} repositories usable for language {language}'
+                f'only {total} repositories usable for language {lang}'
             )
 
         nb_test = max(int(total*test_ratio), 1)
@@ -293,18 +269,18 @@ def split(config: Config) -> None:
 
         test = by_language[:nb_test]
         test['usage'].values[:] = 'test'
-        repositories[f'{language}/test'] = test
+        repositories[f'{lang}/test'] = test
 
         valid = by_language[nb_test:nb_test_valid]
         valid['usage'].values[:] = 'valid'
-        repositories[f'{language}/valid'] = valid
+        repositories[f'{lang}/valid'] = valid
 
         train = by_language[nb_test_valid:]
         train['usage'].values[:] = 'train'
-        repositories[f'{language}/train'] = train
+        repositories[f'{lang}/train'] = train
 
         LOGGER.info(
-            f'{language} nb repositories, train: {total-nb_test_valid}, '
+            f'{lang} nb repositories, train: {total-nb_test_valid}, '
             f'valid: {nb_valid}, test: {nb_test}'
         )
 
@@ -504,3 +480,18 @@ def _move_file(
     destination = config.extracted_files_dir.joinpath(usage, basename)
     destination.write_text(text)
     return ok
+
+
+def finalize(config: Config) -> None:
+    items = config.extensions.items()
+    lang_ext = OrderedDict(sorted(items, key=lambda value: value[0].lower()))
+    language_filename = config.absolute('language.json')
+    with language_filename.open('w') as output:
+        json.dump(lang_ext, output, indent=2)
+
+    LOGGER.info('Dataset successfully generated')
+    LOGGER.info('To train Guesslang with this dataset:')
+    LOGGER.info(f'1. copy {language_filename} into guesslang/data/ directory')
+    LOGGER.info(
+        f'2. run $ guesslang --train {config.cache_dir} /path/to/new_model'
+    )
