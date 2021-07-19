@@ -63,6 +63,7 @@ CMake:
   files:
   - CMakeLists.txt
 
+# To remove
 COBOL:
   aliases: []
   extensions:
@@ -513,6 +514,7 @@ TeX:
   - sty
   files: []
 
+# To remove
 TOML:
   aliases: []
   extensions:

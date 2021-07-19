@@ -1,25 +1,26 @@
 from collections import OrderedDict
-from contextlib import suppress
 import csv
 from enum import Enum, auto
 from functools import partial
-from itertools import groupby
 import json
 import logging
-from operator import itemgetter
 from pathlib import Path
 import random
-import shutil
 from subprocess import run, check_output, PIPE, CalledProcessError
 from typing import Dict, List, Any, Tuple, Optional
 from uuid import uuid4
-from zipfile import ZipFile, BadZipFile
 
 import chardet
 import pandas as pd
 
 from guesslangtools.common import (
-    Config, File, cached, pool_map, CSV_FIELD_LIMIT
+    Config,
+    File,
+    cached,
+    pool_map,
+    LOG_STEP,
+    CSV_FIELD_LIMIT,
+    MAX_FILES_PER_REPOSITORY_PER_LANGUAGE,
 )
 
 
@@ -106,8 +107,8 @@ def list_all(config: Config) -> None:
     output_path = config.absolute(File.AVAILABLE_FILES)
     write_headers = not output_path.exists()
     csv.field_size_limit(CSV_FIELD_LIMIT)
-    with output_path.open('a') as output_file:
-        writer = csv.DictWriter(output_file, fieldnames=AVAILABLE_FILES_COLUMNS)
+    with output_path.open('a') as output:
+        writer = csv.DictWriter(output, fieldnames=AVAILABLE_FILES_COLUMNS)
         if write_headers:
             writer.writeheader()
 
@@ -115,15 +116,15 @@ def list_all(config: Config) -> None:
             for item in result:
                 writer.writerow(item)
 
-            if index % config.step == 0:
+            if index % LOG_STEP == 0:
                 LOGGER.info(f'--> Processed {index} / {total} repositories...')
         LOGGER.info(f'--> Processed {total} / {total} repositories!')
 
     LOGGER.info(f'Created file: {output_path}')
 
 
-def _list_files(item: Dict[str, str], config: Config):
-    max_files = config.max_files_per_repository_per_language
+def _list_files(item: Dict[str, str], config: Config) -> List[Dict[str, Any]]:
+    max_files = MAX_FILES_PER_REPOSITORY_PER_LANGUAGE
     repository_language = item['repository_language']
     repository_dirname = item['repository_dirname']
     repository_path = config.repositories_dir.joinpath(repository_dirname)
@@ -400,7 +401,8 @@ def _choose_files_to_extract(config: Config, df: pd.DataFrame) -> pd.DataFrame:
 
             if len(kept) < nb_files_to_keep:
                 LOGGER.warning(
-                    f'{lang}/{usage} minimum required: {nb_files_to_keep} files'
+                    f'{lang}/{usage} minimum required: '
+                    f'{nb_files_to_keep} files'
                 )
 
     chosen = pd.concat(files)
@@ -421,7 +423,7 @@ def _extract_files(config: Config, df: pd.DataFrame) -> pd.DataFrame:
     )
     for index, grouped_results in enumerate(pool, 1):
         results.append(grouped_results)
-        if index % config.step == 0:
+        if index % LOG_STEP == 0:
             LOGGER.info(f'--> Processed {index} / {nb_groups} repositories...')
     LOGGER.info(f'--> Processed {nb_groups} / {nb_groups} repositories!')
 
@@ -489,14 +491,18 @@ def _move_file(
 
 def finalize(config: Config) -> None:
     items = config.extensions.items()
-    lang_ext = OrderedDict(sorted(items, key=lambda value: value[0].lower()))
-    language_filename = config.absolute('language.json')
+    lang_ext = OrderedDict(sorted(items, key=_lang_name))
+    language_filename = config.absolute('languages.json')
     with language_filename.open('w') as output:
         json.dump(lang_ext, output, indent=2)
 
     LOGGER.info('Dataset successfully generated')
     LOGGER.info('To train Guesslang with this dataset:')
-    LOGGER.info(f'1. copy {language_filename} into guesslang/data/ directory')
+    LOGGER.info(f'* copy {language_filename} into guesslang/data/ directory')
     LOGGER.info(
-        f'2. run $ guesslang --train {config.cache_dir} /path/to/new_model'
+        f'* run $ guesslang --train {config.cache_dir} /path/to/new_model'
     )
+
+
+def _lang_name(value: Tuple[str, str]) -> str:
+    return value[0].lower()

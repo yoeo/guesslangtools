@@ -1,7 +1,6 @@
 from csv import DictReader
 from io import BytesIO
 import logging
-from pathlib import Path
 from secrets import token_bytes
 import shlex
 from shutil import rmtree
@@ -10,7 +9,6 @@ from tarfile import TarFile, TarInfo
 from tempfile import mkdtemp
 from unittest.mock import patch
 import warnings
-from zipfile import ZipFile
 
 from pytest import fixture
 
@@ -28,15 +26,17 @@ FILES_PER_LANG = FILES_PER_LANG_PER_DATASET * 3  # 3 datasets
 REPO_LIST_HEADERS = (
     'ID,Host Type,Name with Owner,Description,Fork,Created Timestamp,'
     'Updated Timestamp,Last pushed Timestamp,Homepage URL,Size,Stars Count,'
-    'Language,Issues enabled,Wiki enabled,Pages enabled,Forks Count,Mirror URL,'
-    'Open Issues Count,Default branch,Watchers Count,UUID,'
+    'Language,Issues enabled,Wiki enabled,Pages enabled,Forks Count,'
+    'Mirror URL,Open Issues Count,Default branch,Watchers Count,UUID,'
     'Fork Source Name with Owner,License,Contributors Count,Readme filename,'
     'Changelog filename,Contributing guidelines filename,License filename,'
     'Code of Conduct filename,Security Threat Model filename,'
     'Security Audit filename,Status,Last Synced Timestamp,SourceRank,'
     'Display Name,SCM type,Pull requests enabled,Logo URL,Keywords'
 )
-REPO_LINE = ',GitHub,{full_name},,false,,,,,,,{lang},,,,,,,,,,,,,,,,,,,,,,,,,,,'
+REPO_LINE = (
+    ',GitHub,{full_name},,false,,,,,,,{lang},,,,,,,,,,,,,,,,,,,,,,,,,,,'
+)
 
 GIT_SETUP_COMMANDS = """
     git init .

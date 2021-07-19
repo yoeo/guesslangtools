@@ -25,13 +25,15 @@ from yaml import safe_load
 
 
 LOGGER = logging.getLogger(__name__)
+
 Function = TypeVar('Function', bound=Callable[..., Any])
 
-NULL_PATH = Path('/dev/null')
 LANGUAGES_FILENAME = 'languages.yaml'
 CHUNK_SIZE = 1024
 TIMEOUT = 30
 CSV_FIELD_LIMIT = 10 * 1024 * 1024  # 1O MiB
+MAX_FILES_PER_REPOSITORY_PER_LANGUAGE = 1000
+LOG_STEP = 100
 
 
 class File:
@@ -53,18 +55,6 @@ class File:
 
 class Config:
     """Runtime configuration."""
-    nb_train_files_per_language = 0
-    nb_valid_files_per_language = 0
-    nb_test_files_per_language = 0
-    nb_repositories_per_language = 0
-    cache_dir = ''
-
-    max_files_per_repository_per_language = 1000
-    bypass_cache = False
-    languages: Dict[str, List[str]] = {}
-    step = 100
-    repositories_dir = NULL_PATH
-    extracted_files_dir = NULL_PATH
 
     def __init__(
         self,
@@ -75,6 +65,7 @@ class Config:
         nb_test: int,
     ) -> None:
         """Setup configuration."""
+        self.bypass_cache = False
         self.nb_train_files_per_language = nb_train
         self.nb_valid_files_per_language = nb_valid
         self.nb_test_files_per_language = nb_test
@@ -139,8 +130,12 @@ class Config:
             LOGGER.info(f'Removed cache file: {path}')
 
     @staticmethod
-    def _map_values(language_info, fieldname, duplicates_ok=True):
-        result = {}
+    def _map_values(
+        language_info: Dict[str, Dict[str, List[str]]],
+        fieldname: str,
+        duplicates_ok: bool = True,
+    ) -> Dict[str, List[str]]:
+        result: Dict[str, List[str]] = {}
         for lang, info in language_info.items():
             for value in info[fieldname]:
                 result.setdefault(value, []).append(lang)

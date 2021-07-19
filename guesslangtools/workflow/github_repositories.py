@@ -1,11 +1,10 @@
-from functools import partial
 import logging
 from subprocess import run, PIPE
 from typing import Dict, Any
 
 import pandas as pd
 
-from guesslangtools.common import File, Config, cached, pool_map
+from guesslangtools.common import File, Config, cached, pool_map, LOG_STEP
 
 
 LOGGER = logging.getLogger(__name__)
@@ -50,7 +49,8 @@ def select(config: Config) -> None:
 
         if nb_selected < max_repositories:
             LOGGER.warning(
-                f'{lang}, not enough repositories, required: {max_repositories}'
+                f'{lang}, not enough repositories, '
+                f'required: {max_repositories}'
             )
 
         if nb_selected == 0:
@@ -104,13 +104,13 @@ def download(config: Config) -> None:
     total = len(input_data)
     for step, row in enumerate(pool_map(_clone_repository, rows, config), 1):
         result_rows.append(row)
-        if step % config.step == 0:
+        if step % LOG_STEP == 0:
             LOGGER.info(f'--> Processed {step} / {total} repositories...')
     LOGGER.info(f'--> Processed {total} / {total} repositories!')
 
     data = pd.DataFrame(result_rows)
 
-    LOGGER.info(f'Removing empty repositories')
+    LOGGER.info('Removing empty repositories')
     data = data[~data['repository_is_empty']]
     LOGGER.info(f'Kept {len(data)} non empty repositories')
 
