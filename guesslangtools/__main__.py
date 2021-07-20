@@ -6,6 +6,7 @@ import logging.config
 from typing import Dict, Any
 
 from guesslangtools import hacks
+from guesslangtools import utils
 from guesslangtools.common import Config
 from guesslangtools.app import run_workflow
 
@@ -74,6 +75,19 @@ def main() -> None:
         help='number of testing files per language',
     )
 
+    # Utils to analyse Guesslang model performances
+    parser.add_argument(
+        '--util-prediction-confidence',
+        action='store_true',
+        default=False,
+        help='plot the prediction probabilies distribution for each language',
+    )
+    parser.add_argument(
+        '--util-confusion-matrix',
+        metavar='GUESSLANG_TEST_REPORT_FILENAME',
+        help='show languages that Guesslange confuses with others',
+    )
+
     # Hacks to use when you don't have enough files for some language
     parser.add_argument(
         '--hack-repo-dist',
@@ -109,6 +123,7 @@ def main() -> None:
 
     args = parser.parse_args()
     items = vars(args).items()
+    util_args = any(val for name, val in items if name.startswith('util_'))
     hack_args = any(val for name, val in items if name.startswith('hack_'))
 
     log_level = 'DEBUG' if args.debug else 'INFO'
@@ -124,10 +139,20 @@ def main() -> None:
     )
 
     with suppress(KeyboardInterrupt):
-        if hack_args:
+        if util_args:
+            run_utils(config, args)
+        elif hack_args:
             run_hacks(config, args)
         else:
             run_workflow(config)
+
+
+def run_utils(config: Config, args: Namespace) -> None:
+    if args.util_prediction_confidence:
+        utils.plot_prediction_confidence(config)
+
+    if args.util_confusion_matrix:
+        utils.show_confusion_matrix(config, args.util_confusion_matrix)
 
 
 def run_hacks(config: Config, args: Namespace) -> None:

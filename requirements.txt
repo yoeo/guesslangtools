@@ -1,4 +1,6 @@
 chardet
+guesslang
+matplotlib
 pandas
 requests
 PyYAML
