@@ -70,13 +70,13 @@ class Config:
         self.nb_valid_files_per_language = nb_valid
         self.nb_test_files_per_language = nb_test
         self.nb_repositories_per_language = nb_repositories
-        self.cache_dir = cache_dir
+        self.cache_path = Path(cache_dir).absolute()
         self.repositories_dir = self.absolute('repositories')
         self.extracted_files_dir = self.absolute('files')
 
-        Path(self.cache_dir).mkdir(exist_ok=True)
-        Path(self.repositories_dir).mkdir(exist_ok=True)
-        Path(self.extracted_files_dir).mkdir(exist_ok=True)
+        self.cache_path.mkdir(exist_ok=True)
+        self.repositories_dir.mkdir(exist_ok=True)
+        self.extracted_files_dir.mkdir(exist_ok=True)
 
         root_path = Path(__file__).parent
         languages_path = root_path.joinpath('data', LANGUAGES_FILENAME)
@@ -100,7 +100,7 @@ class Config:
 
     def absolute(self, *path_parts: str) -> Path:
         """Create an absolute path."""
-        return Path(self.cache_dir, *path_parts).absolute()
+        return self.cache_path.joinpath(*path_parts).absolute()
 
     def load_csv(self, filename: str) -> pd.DataFrame:
         """Load a CSV file."""
@@ -162,10 +162,6 @@ def cached(location: str) -> Callable[[Function], Function]:
 
         @wraps(func)
         def wrapped(config: Config, *args: Any, **kw: Any) -> Any:
-
-            if not config.cache_dir:
-                raise RuntimeError('Cache directory not set')
-
             path = config.absolute(location)
             if config.bypass_cache:
                 config.remove_from_cache(path)

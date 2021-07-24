@@ -87,6 +87,12 @@ def main() -> None:
         metavar='GUESSLANG_TEST_REPORT_FILENAME',
         help='show languages that Guesslange confuses with others',
     )
+    parser.add_argument(
+        '--util-less-training-files',
+        type=int,
+        metavar='NB_FILES_PER_LANGUAGE',
+        help='extract a subset of the training files dataset',
+    )
 
     # Hacks to use when you don't have enough files for some language
     parser.add_argument(
@@ -153,6 +159,9 @@ def run_utils(config: Config, args: Namespace) -> None:
 
     if args.util_confusion_matrix:
         utils.show_confusion_matrix(config, args.util_confusion_matrix)
+
+    if args.util_less_training_files:
+        utils.shring_training_dataset(config, args.util_less_training_files)
 
 
 def run_hacks(config: Config, args: Namespace) -> None:

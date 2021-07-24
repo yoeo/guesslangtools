@@ -500,7 +500,7 @@ def finalize(config: Config) -> None:
     LOGGER.info('To train Guesslang with this dataset:')
     LOGGER.info(f'* copy {language_filename} into guesslang/data/ directory')
     LOGGER.info(
-        f'* run $ guesslang --train {config.cache_dir} /path/to/new_model'
+        f'* run $ guesslang --train {config.cache_path} /path/to/new_model'
     )
 
 

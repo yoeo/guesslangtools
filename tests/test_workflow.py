@@ -1,6 +1,7 @@
 from csv import DictReader
 from io import BytesIO
 import logging
+from pathlib import Path
 from secrets import token_bytes
 import shlex
 from shutil import rmtree
@@ -150,11 +151,11 @@ def config():
         nb_valid=FILES_PER_LANG_PER_DATASET,
         nb_test=FILES_PER_LANG_PER_DATASET,
     )
-    assert config.cache_dir == tempdir
+    assert config.cache_path == Path(tempdir).absolute()
     try:
         yield config
     finally:
-        rmtree(config.cache_dir)
+        rmtree(config.cache_path)
 
 
 @patch(

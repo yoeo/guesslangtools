@@ -2,6 +2,7 @@ import logging
 from datetime import datetime
 import json
 from pathlib import Path
+from shutil import rmtree
 from typing import Dict, Any, List, Set, Iterator
 import webbrowser
 
@@ -59,7 +60,7 @@ def plot_prediction_confidence(config: Config) -> None:
 
 
 def _setup_utils(config: Config) -> Path:
-    utils_path = Path(config.cache_dir, 'utils').absolute()
+    utils_path = config.cache_path.joinpath('utils')
     utils_path.mkdir(exist_ok=True)
     return utils_path
 
@@ -172,3 +173,33 @@ def _prepare_resources(config: Config, graph_data: ReportGraph) -> Path:
 
     LOGGER.info(f'Report graph available at {index_file}')
     return index_file
+
+
+def shring_training_dataset(config: Config, nb_files: int) -> None:
+    train_path = config.extracted_files_dir.joinpath('train')
+    subset_path = config.extracted_files_dir.joinpath(f'train_{nb_files}')
+    if subset_path.exists():
+        LOGGER.warning(f'Remove training files subset {subset_path}')
+        rmtree(subset_path)
+    subset_path.mkdir()
+
+    LOGGER.info('List training files')
+    dataset = ([path.name, path.suffix] for path in train_path.iterdir())
+    full_df = pd.DataFrame(dataset, columns=['name', 'suffix'])
+
+    LOGGER.info('Shuffle files')
+    full_df = full_df.sample(frac=1).reset_index(drop=True)
+
+    LOGGER.info('Extract training files subset')
+    for lang, ext in config.extensions.items():
+        suffix = f'.{ext}'
+        df = full_df
+        df = df[df['suffix'] == suffix]
+        df = df.head(nb_files)
+        LOGGER.info(f'- Extract {len(df)} {lang} files...')
+        for _, item in df.iterrows():
+            name = item['name']
+            content = train_path.joinpath(name).read_text()
+            subset_path.joinpath(name).write_text(content)
+
+    LOGGER.info(f'Files extracted into {subset_path}')
