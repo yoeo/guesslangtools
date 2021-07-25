@@ -1,7 +1,8 @@
 flake8
+numpy==1.19.5 # Just to make Tensorflow work
 mypy
 pytest
-six==1.15.0 # To fix sub-requirements conflicts
+six==1.15.0 # Just to make Tensorflow work
 types-PyYAML
 types-requests
 types-chardet
