@@ -1,5 +1,4 @@
-# GuesslangTools [![Build Status](https://travis-ci.org/yoeo/guesslangtools.svg?branch=master)](https://travis-ci.org/yoeo/guesslangtools)
-
+# GuesslangTools [![Build Status](https://github.com/yoeo/guesslangtools/actions/workflows/python-package.yml/badge.svg)](https://github.com/yoeo/guesslangtools/actions)
 
 ![Guesslangtools](guesslangtools/data/guesslangtools.png)
 
@@ -20,7 +19,7 @@ GitHub repositories.
 The million source code files used to feed Guesslang are generated as follows:
 
 1. Download Github open source repositories information from the
-[Libraries.io Open Source Repository and Dependency Metadata](https://zenodo.org/record/1196312/files/Libraries.io-open-data-1.2.0.tar.gz).
+[Libraries.io Open Source Repository and Dependency Metadata](https://zenodo.org/record/3626071/files/libraries-1.6.0-2020-01-12.tar.gz?download=1).
 2. Randomly select the repositories that will be used to create
   Guesslang's training, validation and test datasets.
 3. Download each selected repository.
@@ -47,7 +46,7 @@ GuesslangTools ensures that:
 
 ### Prerequisite
 
-* GuesslangTools requires Python 3.6 or later.
+* GuesslangTools requires Python 3.7 or later.
 * At least 16GB of total system memory is recommended.
 * At least 150GB of free storage space is recommended.
 
@@ -88,4 +87,4 @@ gltool --help
 
 * SQL repositories dataset retrieve from [The Public Git Archive](https://github.com/src-d/datasets/tree/master/PublicGitArchive)
 
-* GuesslangTools — Copyright (c) 2020 Y. SOMDA, [MIT License](LICENSE)
+* GuesslangTools — Copyright (c) 2021 Y. SOMDA, [MIT License](LICENSE)

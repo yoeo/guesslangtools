@@ -19,31 +19,36 @@ def version(base_module: str) -> str:
     return format(ast.literal_eval(repr_value))
 
 
-setup(
-    # Package info
-    name="guesslangtools",
-    author="Y. SOMDA",
-    version=version('guesslangtools'),
-    url="http://github.com/yoeo/guesslangtools",
-    description="Guesslang tools python package",
-    license="MIT",
-    classifiers=[
-        "License :: OSI Approved :: MIT License",
-        "Operating System :: OS Independent",
-        "Programming Language :: Python :: 3",
-    ],
-    # Install
-    python_requires='>=3',
-    platforms='any',
-    packages=find_packages(exclude=['tests']),
-    install_requires=Path('requirements.txt').read_text(),
-    zip_safe=True,
-    include_package_data=True,
-    # Test
-    setup_requires=['pytest-runner'],
-    tests_require='pytest',
-    # Execute
-    entry_points={
-        'console_scripts': ['gltool = guesslangtools.__main__:main']
-    },
-)
+if __name__ == '__main__':
+    # Avoids calling `setup(...)` inside Guesslangtools
+    # process pools with `spawn` context,
+    # when running the unit tests with `python setup.py test`
+
+    setup(
+        # Package info
+        name="guesslangtools",
+        author="Y. SOMDA",
+        version=version('guesslangtools'),
+        url="http://github.com/yoeo/guesslangtools",
+        description="Guesslang tools python package",
+        license="MIT",
+        classifiers=[
+            "License :: OSI Approved :: MIT License",
+            "Operating System :: OS Independent",
+            "Programming Language :: Python :: 3",
+        ],
+        # Install
+        python_requires='>=3',
+        platforms='any',
+        packages=find_packages(exclude=['tests']),
+        install_requires=Path('requirements.txt').read_text(),
+        zip_safe=True,
+        include_package_data=True,
+        # Test
+        setup_requires=['pytest-runner'],
+        tests_require='pytest',
+        # Execute
+        entry_points={
+            'console_scripts': ['gltool = guesslangtools.__main__:main']
+        },
+    )
