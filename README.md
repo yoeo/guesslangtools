@@ -87,4 +87,4 @@ gltool --help
 
 * SQL repositories dataset retrieve from [The Public Git Archive](https://github.com/src-d/datasets/tree/master/PublicGitArchive)
 
-* GuesslangTools — Copyright (c) 2020 Y. SOMDA, [MIT License](LICENSE)
+* GuesslangTools — Copyright (c) 2021 Y. SOMDA, [MIT License](LICENSE)
