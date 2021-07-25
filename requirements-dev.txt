@@ -1,6 +1,7 @@
 flake8
 mypy
 pytest
+six==1.15.0 # To fix sub-requirements conflicts
 types-PyYAML
 types-requests
 types-chardet
