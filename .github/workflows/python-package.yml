@@ -30,6 +30,8 @@ jobs:
         if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
     - name: Run tests
       run: |
+        git config --global user.email "test@example.com"
+        git config --global user.name "Test"
         python setup.py test
     - name: Check static types
       run: |
