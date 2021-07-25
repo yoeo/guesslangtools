@@ -1,5 +1,4 @@
-# GuesslangTools [![Build Status](https://travis-ci.org/yoeo/guesslangtools.svg?branch=master)](https://travis-ci.org/yoeo/guesslangtools)
-
+# GuesslangTools [![Build Status](https://github.com/yoeo/guesslangtools/actions/workflows/python-package.yml/badge.svg)](https://github.com/yoeo/guesslangtools/actions)
 
 ![Guesslangtools](guesslangtools/data/guesslangtools.png)
 
@@ -47,7 +46,7 @@ GuesslangTools ensures that:
 
 ### Prerequisite
 
-* GuesslangTools requires Python 3.6 or later.
+* GuesslangTools requires Python 3.7 or later.
 * At least 16GB of total system memory is recommended.
 * At least 150GB of free storage space is recommended.
 
