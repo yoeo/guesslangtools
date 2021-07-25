@@ -2,6 +2,6 @@ chardet
 guesslang
 matplotlib
 pandas
-requests
 PyYAML
 six==1.15.0 # To fix sub-requirements conflicts
+requests
