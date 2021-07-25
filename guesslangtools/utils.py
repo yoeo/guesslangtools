@@ -74,7 +74,8 @@ def _run_tests(test_path: Path) -> Iterator[Dict[str, Any]]:
 
         label = guess._extension_map[ext]
         content = filename.read_text()
-        result = {'_label_': label} | dict(guess.probabilities(content))
+        result = {'_label_': label}
+        result.update(dict(guess.probabilities(content)))
         yield result
 
         if index % LOG_STEP == 0:
