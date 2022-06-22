@@ -1,5 +1,5 @@
 flake8
-numpy==1.19.5 # Just to make Tensorflow work
+numpy==1.22.0 # Just to make Tensorflow work
 mypy
 pytest
 six==1.15.0 # Just to make Tensorflow work
